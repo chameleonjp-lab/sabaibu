@@ -177,6 +177,8 @@ export class GameWorld {
     private readonly auditModule: ModuleId | undefined,
     private readonly debugMode: boolean,
     private readonly rerollPreview: number,
+    private readonly levelPreview: number,
+    private readonly balancePreviewLevel: number,
   ) {
     this.enemyMaterial = this.makeMaterial("drone-shell", new Color3(0.025, 0.15, 0.17), new Color3(0.02, 0.85, 0.95));
     this.enemyMaterial.diffuseTexture = new Texture(GAME_ASSETS.dronePanel, scene, true, false);
@@ -301,7 +303,12 @@ export class GameWorld {
       this.xpNeeded = 999;
       this.setupCombatDebugScenario();
     }
-    if (this.forceModulePreview) {
+    if (this.balancePreviewLevel >= 30) this.setupHighLevelBalancePreview(this.balancePreviewLevel);
+    if (this.levelPreview >= 1) {
+      this.setupLevelProgressionPreview(this.levelPreview);
+      this.phase = "upgrade";
+      this.prepareUpgradeChoices();
+    } else if (this.forceModulePreview) {
       this.level = 10;
       this.phase = "upgrade";
       this.prepareUpgradeChoices();
@@ -689,6 +696,20 @@ export class GameWorld {
     this.activateModule(moduleId);
   }
 
+  private setupLevelProgressionPreview(level: number) {
+    this.level = level;
+    this.xpNeeded = 8 + this.level * 5;
+    if (level < 30) return;
+    const existingWeapons: ModuleId[] = ["vector", "nova", "mirage", "pylon", "ricochet"];
+    for (const moduleId of existingWeapons) this.moduleTiers[moduleId] = 1;
+  }
+
+  private setupHighLevelBalancePreview(level: number) {
+    this.level = level;
+    this.xpNeeded = 8 + this.level * 5;
+    this.spawnTimer = 0;
+  }
+
   private getRecoverableDropPosition(position: Vector3) {
     const offset = position.subtract(this.player.position);
     offset.y = 0;
@@ -719,22 +740,40 @@ export class GameWorld {
     if (this.auditModule) return;
     this.spawnTimer -= delta;
     if (this.spawnTimer > 0) return;
-    const enemyCap = 42 + Math.floor(Math.min(3, this.elapsed / 75)) * 10;
-    const batch = this.elapsed >= 100 ? 2 : 1;
-    const availableSlots = Math.max(0, enemyCap - this.enemies.length);
-    for (let i = 0; i < Math.min(batch, availableSlots); i += 1) this.spawnEnemy();
-    this.spawnTimer = Math.max(0.6, 0.9 - this.elapsed / 150);
+    const spawnProfile = this.getHighLevelSpawnProfile();
+    const availableSlots = Math.max(0, spawnProfile.enemyCap - this.enemies.length);
+    for (let i = 0; i < Math.min(spawnProfile.batch, availableSlots); i += 1) this.spawnEnemy();
+    this.spawnTimer = spawnProfile.interval;
+  }
+
+  private getHighLevelRewardTier() {
+    if (this.level < 30) return 0;
+    return Math.min(4, 1 + Math.floor((this.level - 30) / 10));
+  }
+
+  private getHighLevelSpawnProfile() {
+    const baselineCap = 42 + Math.floor(Math.min(3, this.elapsed / 75)) * 10;
+    const baselineBatch = this.elapsed >= 100 ? 2 : 1;
+    const baselineInterval = Math.max(0.6, 0.9 - this.elapsed / 150);
+    const rewardTier = this.getHighLevelRewardTier();
+    if (rewardTier === 0) return { enemyCap: baselineCap, batch: baselineBatch, interval: baselineInterval };
+    return {
+      enemyCap: Math.max(baselineCap, 58 + (rewardTier - 1) * 12),
+      batch: Math.max(baselineBatch, rewardTier >= 3 ? 3 : 2),
+      interval: Math.min(baselineInterval, Math.max(0.42, 0.62 - (rewardTier - 1) * 0.06)),
+    };
   }
 
   private spawnEnemy(kindOverride?: EnemyKind) {
     const kind = kindOverride ?? this.pickEnemyKind();
     const baseHp = 14 + Math.floor(this.elapsed / 25) * 4;
     const baseSpeed = 2.05 + Math.min(1.55, this.elapsed / 120);
+    const experienceMultiplier = 1 + this.getHighLevelRewardTier() * 0.45;
     const profile = kind === "striker"
-      ? { hp: Math.max(9, Math.ceil(baseHp * 0.7)), speed: baseSpeed * 1.65, scale: 0.72, contactDamage: 3, xpValue: 1, material: this.strikerMaterial, meshType: 0, meshSize: 0.92 }
+      ? { hp: Math.max(9, Math.ceil(baseHp * 0.7)), speed: baseSpeed * 1.65, scale: 0.72, contactDamage: 3, xpValue: Math.ceil(1 * experienceMultiplier), material: this.strikerMaterial, meshType: 0, meshSize: 0.92 }
       : kind === "bulwark"
-        ? { hp: Math.ceil(baseHp * 3.1), speed: baseSpeed * 0.62, scale: 1.46, contactDamage: 7, xpValue: 4, material: this.bulwarkMaterial, meshType: 2, meshSize: 1.2 }
-        : { hp: baseHp, speed: baseSpeed, scale: 1, contactDamage: 4, xpValue: 2, material: this.enemyMaterial, meshType: 1, meshSize: 1.05 };
+        ? { hp: Math.ceil(baseHp * 3.1), speed: baseSpeed * 0.62, scale: 1.46, contactDamage: 7, xpValue: Math.ceil(4 * experienceMultiplier), material: this.bulwarkMaterial, meshType: 2, meshSize: 1.2 }
+        : { hp: baseHp, speed: baseSpeed, scale: 1, contactDamage: 4, xpValue: Math.ceil(2 * experienceMultiplier), material: this.enemyMaterial, meshType: 1, meshSize: 1.05 };
     const ingress = this.getWallIngressPosition();
     const body = MeshBuilder.CreatePolyhedron(`${kind}-drone`, { type: profile.meshType, size: profile.meshSize }, this.scene);
     body.position.copyFrom(ingress.spawn);
@@ -2537,9 +2576,9 @@ export class GameWorld {
     gem.rotation.x = Math.PI;
     gem.material = this.gemMaterial;
     this.gems.push({ mesh: gem, value: enemy.xpValue });
-    const shouldDropRecovery = this.health < this.maxHealth && Math.random() < RECOVERY_DROP_CHANCE;
+    const shouldDropRecovery = this.health < this.maxHealth && Math.random() < this.getRecoveryDropChance();
     if (shouldDropRecovery) this.createRecoveryItem(dropPosition);
-    const shouldDropMagnet = Math.random() < MAGNET_DROP_CHANCE;
+    const shouldDropMagnet = Math.random() < this.getMagnetDropChance();
     if (shouldDropMagnet) this.createMagnetItem(this.getRecoverableDropPosition(dropPosition.add(new Vector3(0.5, 0, -0.5))));
   }
 
@@ -2555,7 +2594,16 @@ export class GameWorld {
     crossHorizontal.parent = medkit;
     crossHorizontal.position.set(0, 0.24, -0.34);
     crossHorizontal.material = this.projectileMaterial;
-    this.recoveryItems.push({ mesh: medkit, amount: Math.max(18, Math.ceil(this.maxHealth * 0.22)), life });
+    const recoveryRatio = 0.22 + this.getHighLevelRewardTier() * 0.015;
+    this.recoveryItems.push({ mesh: medkit, amount: Math.max(18, Math.ceil(this.maxHealth * recoveryRatio)), life });
+  }
+
+  private getRecoveryDropChance() {
+    return Math.min(0.11, RECOVERY_DROP_CHANCE + this.getHighLevelRewardTier() * 0.012);
+  }
+
+  private getMagnetDropChance() {
+    return Math.min(0.055, MAGNET_DROP_CHANCE + this.getHighLevelRewardTier() * 0.0075);
   }
 
   private createMagnetItem(position: Vector3, life = DROP_LIFETIME) {
@@ -2716,7 +2764,8 @@ export class GameWorld {
       weaponLimit: this.getWeaponLimit(),
       rerollsRemaining: this.rerollsRemaining,
       enemyCount: this.enemies.length,
-      debugStatus: this.debugMode ? `${this.auditModule ? `AUDIT:${this.auditModule}` : "DBG"} IN:${this.enemies.filter((enemy) => this.isInsideContainment(enemy)).length} OUT:${this.enemies.filter((enemy) => !this.isInsideContainment(enemy)).length} FIRE:${this.debugProjectilesFired} COL:${this.debugProjectileCollisions} HIT:${this.debugHits} KILL:${this.debugKills} ENTRY:${this.debugEntries} CRYO:${this.enemies.filter((enemy) => enemy.cryoTime > 0).length} COR:${this.enemies.filter((enemy) => enemy.corrosionTime > 0).length} DMG:${this.lastDamageSource}` : undefined,
+      moduleMilestone: this.isModuleMilestone(),
+      debugStatus: this.debugMode ? `${this.auditModule ? `AUDIT:${this.auditModule}` : this.balancePreviewLevel >= 30 ? `BAL:L${this.level} T${this.getHighLevelRewardTier()} CAP${this.getHighLevelSpawnProfile().enemyCap} B${this.getHighLevelSpawnProfile().batch} I${this.getHighLevelSpawnProfile().interval.toFixed(2)} XPx${(1 + this.getHighLevelRewardTier() * 0.45).toFixed(2)} R${(this.getRecoveryDropChance() * 100).toFixed(1)}% M${(this.getMagnetDropChance() * 100).toFixed(1)}%` : "DBG"} IN:${this.enemies.filter((enemy) => this.isInsideContainment(enemy)).length} OUT:${this.enemies.filter((enemy) => !this.isInsideContainment(enemy)).length} FIRE:${this.debugProjectilesFired} COL:${this.debugProjectileCollisions} HIT:${this.debugHits} KILL:${this.debugKills} ENTRY:${this.debugEntries} CRYO:${this.enemies.filter((enemy) => enemy.cryoTime > 0).length} COR:${this.enemies.filter((enemy) => enemy.corrosionTime > 0).length} DMG:${this.lastDamageSource}` : undefined,
       attacks,
       upgrades: this.getUpgradeOptions(),
     });
@@ -2724,6 +2773,10 @@ export class GameWorld {
 
   private prepareUpgradeChoices(excludedIds = new Set<UpgradeId>()) {
     this.moduleSelection = this.level >= 10;
+    if (this.isModuleMilestone()) {
+      this.upgradeOptions = this.pickModuleMilestoneOptions(excludedIds);
+      return;
+    }
     const pool = this.getUpgradeCandidatePool();
     const freshPool = pool.filter((option) => !excludedIds.has(option.id));
     this.upgradeOptions = this.pickRandomOptions(freshPool.length >= 3 ? freshPool : pool, 3);
@@ -2731,7 +2784,36 @@ export class GameWorld {
 
   private getUpgradeCandidatePool() {
     const catalog = this.level >= 10 ? UPGRADE_CATALOG : STANDARD_UPGRADES;
+    if (this.level >= 30) return catalog.filter((option) => this.canOfferExistingUpgrade(option));
     return catalog.filter((option) => this.canOfferUpgrade(option));
+  }
+
+  private pickModuleMilestoneOptions(excludedIds: Set<UpgradeId>) {
+    const modulePool = MODULE_UPGRADES.filter((option) => this.isModuleId(option.id) && this.moduleTiers[option.id] === 0 && this.canOfferUpgrade(option));
+    const weaponPool = modulePool.filter((option) => this.isModuleId(option.id) && this.isWeaponModule(option.id));
+    const freshWeaponPool = weaponPool.filter((option) => !excludedIds.has(option.id));
+    const candidates = freshWeaponPool.length >= 3 ? freshWeaponPool : weaponPool;
+    const selected = this.pickRandomOptions(candidates, 3);
+    if (selected.length < 3) {
+      const supportPool = modulePool.filter((option) => !selected.some((picked) => picked.id === option.id));
+      selected.push(...this.pickRandomOptions(supportPool, 3 - selected.length));
+    }
+    if (selected.length >= 3) return selected;
+    const existingPool = this.getExistingUpgradePool().filter((option) => !selected.some((picked) => picked.id === option.id));
+    selected.push(...this.pickRandomOptions(existingPool, 3 - selected.length));
+    return selected;
+  }
+
+  private canOfferExistingUpgrade(option: UpgradeOption) {
+    const id = option.id;
+    if (this.isModuleId(id)) return this.moduleTiers[id] > 0 && this.canOfferUpgrade(option);
+    if (id === "scatter") return this.hasScatter;
+    if (id === "orbit") return this.hasOrbit;
+    return this.canOfferUpgrade(option);
+  }
+
+  private getExistingUpgradePool() {
+    return UPGRADE_CATALOG.filter((option) => this.canOfferExistingUpgrade(option));
   }
 
   private canOfferUpgrade(option: UpgradeOption) {
@@ -2759,7 +2841,12 @@ export class GameWorld {
   }
 
   private getWeaponLimit() {
-    return 5 + Math.max(0, Math.floor(this.level / 10) - 2);
+    if (this.level < 30) return 5;
+    return 6 + Math.floor((this.level - 30) / 5);
+  }
+
+  private isModuleMilestone() {
+    return this.level >= 30 && this.level % 5 === 0;
   }
 
   private pickRandomOptions(options: UpgradeOption[], count: number) {

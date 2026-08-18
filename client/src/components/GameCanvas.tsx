@@ -39,7 +39,9 @@ export default function GameCanvas() {
   const demoMode = new URLSearchParams(window.location.search).has("demo");
   const searchParams = new URLSearchParams(window.location.search);
   const rerollPreview = Number(searchParams.get("reroll") ?? (searchParams.has("reroll") ? "1" : "0"));
-  const forceUpgrade = searchParams.has("upgrade") || rerollPreview > 0;
+  const levelPreview = Math.max(0, Math.min(200, Math.floor(Number(searchParams.get("level") ?? "0"))));
+  const balancePreviewLevel = Math.max(0, Math.min(200, Math.floor(Number(searchParams.get("balance") ?? "0"))));
+  const forceUpgrade = searchParams.has("upgrade") || rerollPreview > 0 || levelPreview > 0;
   const forceModulePreview = new URLSearchParams(window.location.search).has("modules");
   const bossPreview = new URLSearchParams(window.location.search).has("boss");
   const strikerPreview = searchParams.has("striker");
@@ -49,7 +51,7 @@ export default function GameCanvas() {
   const bossExplosionFarPreview = searchParams.has("bossExplosionFar");
   const auditValue = searchParams.get("audit");
   const auditModule = MODULE_UPGRADES.some((option) => option.id === auditValue) ? auditValue as ModuleId : undefined;
-  const debugMode = searchParams.has("debug") || Boolean(auditModule);
+  const debugMode = searchParams.has("debug") || Boolean(auditModule) || balancePreviewLevel > 0;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -57,7 +59,7 @@ export default function GameCanvas() {
     startedRef.current = true;
     const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, adaptToDeviceRatio: true });
     let cancelled = false;
-    createGameScene(engine, canvas, { demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, auditModule, debugMode, rerollPreview, onSnapshot: setSnapshot }).then((handle) => {
+    createGameScene(engine, canvas, { demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, auditModule, debugMode, rerollPreview, levelPreview, balancePreviewLevel, onSnapshot: setSnapshot }).then((handle) => {
       if (cancelled) {
         handle.dispose();
         return;
@@ -87,7 +89,7 @@ export default function GameCanvas() {
       engine.dispose();
       startedRef.current = false;
     };
-  }, [demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, auditModule, debugMode, rerollPreview]);
+  }, [demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, auditModule, debugMode, rerollPreview, levelPreview, balancePreviewLevel]);
 
   const setDirection = (x: number, z: number) => handleRef.current?.setTouchDirection(x, z);
   const updateJoystick = (clientX: number, clientY: number) => {
@@ -163,7 +165,7 @@ export default function GameCanvas() {
         </nav>
         <aside className="mobile-fire-status" aria-hidden="true"><span>WPN</span><b>AUTO<br/>FIRE</b><i /></aside>
 
-        {snapshot.phase === "upgrade" && <div className="modal-layer"><section className="upgrade-console"><p className="modal-eyebrow">SIGNAL OVERRIDE ACCEPTED</p><h2>SELECT A FIELD<br/><em>MODIFICATION.</em></h2><p className="modal-copy">完全ランダムな3つの候補から、ひとつだけ承認してください。追加武器枠 {snapshot.weaponCount}/{snapshot.weaponLimit}。</p><div className="upgrade-actions"><button className="reroll-button" onClick={rerollUpgrades} disabled={snapshot.rerollsRemaining <= 0}>REROLL <span>{snapshot.rerollsRemaining}/3</span></button><small>候補を再抽選</small></div><div className="upgrade-grid">{snapshot.upgrades.map((upgrade, index) => <button key={upgrade.id} className="upgrade-card" onClick={() => selectUpgrade(upgrade.id)}><span className="choice-number">0{index + 1}</span><ModuleIcon id={upgrade.iconId} className="upgrade-symbol"/><span className="upgrade-code">{upgrade.code}</span><strong>{upgrade.title}</strong><small>{upgrade.description}</small><i>INSTALL</i></button>)}</div></section></div>}
+        {snapshot.phase === "upgrade" && <div className="modal-layer"><section className="upgrade-console"><p className="modal-eyebrow">{snapshot.moduleMilestone ? "MODULE BAY EXPANDED" : "SIGNAL OVERRIDE ACCEPTED"}</p><h2>SELECT A FIELD<br/><em>MODIFICATION.</em></h2><p className="modal-copy">{snapshot.moduleMilestone ? "5Lv節目の新規攻撃モジュール候補です。ひとつだけ導入してください。" : "既存装備の強化候補から、ひとつだけ承認してください。"} 追加武器枠 {snapshot.weaponCount}/{snapshot.weaponLimit}。</p><div className="upgrade-actions"><button className="reroll-button" onClick={rerollUpgrades} disabled={snapshot.rerollsRemaining <= 0}>REROLL <span>{snapshot.rerollsRemaining}/3</span></button><small>候補を再抽選</small></div><div className="upgrade-grid">{snapshot.upgrades.map((upgrade, index) => <button key={upgrade.id} className="upgrade-card" onClick={() => selectUpgrade(upgrade.id)}><span className="choice-number">0{index + 1}</span><ModuleIcon id={upgrade.iconId} className="upgrade-symbol"/><span className="upgrade-code">{upgrade.code}</span><strong>{upgrade.title}</strong><small>{upgrade.description}</small><i>INSTALL</i></button>)}</div></section></div>}
         {snapshot.phase === "gameover" && <div className="modal-layer"><section className="failure-console"><p className="modal-eyebrow danger">CONTAINMENT BREACH</p><h2>SIGNAL<br/><em>LOST.</em></h2><div className="failure-stats"><span>TIME HELD <b>{formatTime(snapshot.seconds)}</b></span><span>HOSTILES PURGED <b>{snapshot.kills}</b></span></div><p>封鎖線は崩壊しました。装備を再同期し、次の出撃に備えてください。</p><button onClick={() => handleRef.current?.restart()}>RE-ENTER THE SIEGE <span>GO</span></button></section></div>}
       </section>
     </main>

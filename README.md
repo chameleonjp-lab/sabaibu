@@ -41,6 +41,8 @@ pnpm build
 | `?bossExplosion` | 近距離で撃破したBulwarkの10ダメージ確認。 |
 | `?bossExplosionFar` | 遠距離で撃破したBulwarkが無被弾となる確認。 |
 | `?debug` | 壁内外数、発射、衝突、命中、撃破、侵入、最終被弾原因を表示。 |
+| `?level=30` / `?level=31` / `?level=35` | Lv30以降の5Lv周期モジュール候補と所持枠を確認するレベル進行プレビュー。 |
+| `?balance=30` / `?balance=40` / `?balance=50` | 高レベル帯の敵密度、経験値倍率、回復・マグネット報酬をHUDで確認する戦闘プレビュー。 |
 
 ## 同梱資料
 
