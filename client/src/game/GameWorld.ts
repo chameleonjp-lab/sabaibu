@@ -14,10 +14,37 @@ import { GAME_ASSETS } from "./assets";
 import { MODULE_UPGRADES, STANDARD_UPGRADES, UPGRADE_CATALOG, type AttackStatus, type GamePhase, type GameSnapshot, type ModuleId, type UpgradeId, type UpgradeOption } from "./types";
 
 type EnemyKind = "scout" | "striker" | "bulwark";
+const HIGH_VARIANT_IDS = ["rift-runner", "ion-bastion", "flare-wisp", "pulse-maw", "vector-lancer", "shardling", "gravity-husk", "vanta-stalker", "hex-warden", "ember-ram", "echo-swarm", "flux-guardian", "plasma-sower", "phase-razor", "abyss-harrier", "nova-sentinel", "lattice-marauder", "cinder-golem", "prism-revenant", "void-archon", "singularity-beast"] as const;
+type HighVariantId = (typeof HIGH_VARIANT_IDS)[number];
+type VariantTrait = "surge" | "pulse" | "drift" | "armor" | "swarm" | "siege" | "skirmish";
+type HighVariantConfig = { unlockLevel: 40 | 50 | 60; title: string; hp: number; speed: number; scale: number; contactDamage: number; xp: number; meshType: number; meshSize: number; trait: VariantTrait; tint: readonly [number, number, number] };
+const HIGH_VARIANTS: Record<HighVariantId, HighVariantConfig> = {
+  "rift-runner": { unlockLevel: 40, title: "リフトランナー", hp: 0.72, speed: 1.8, scale: 0.7, contactDamage: 4, xp: 3, meshType: 0, meshSize: 0.78, trait: "surge", tint: [0.1, 0.95, 1] },
+  "ion-bastion": { unlockLevel: 40, title: "イオンバスティオン", hp: 2.45, speed: 0.58, scale: 1.38, contactDamage: 7, xp: 6, meshType: 1, meshSize: 1.22, trait: "armor", tint: [0.36, 0.72, 1] },
+  "flare-wisp": { unlockLevel: 40, title: "フレアウィスプ", hp: 0.9, speed: 1.42, scale: 0.58, contactDamage: 3, xp: 3, meshType: 2, meshSize: 0.72, trait: "drift", tint: [1, 0.34, 0.05] },
+  "pulse-maw": { unlockLevel: 40, title: "パルスモウ", hp: 1.28, speed: 0.92, scale: 1.05, contactDamage: 5, xp: 5, meshType: 2, meshSize: 0.96, trait: "pulse", tint: [1, 0.04, 0.42] },
+  "vector-lancer": { unlockLevel: 40, title: "ベクターランサー", hp: 1.05, speed: 1.32, scale: 0.82, contactDamage: 5, xp: 4, meshType: 0, meshSize: 1.04, trait: "surge", tint: [0.72, 0.12, 1] },
+  "shardling": { unlockLevel: 40, title: "シャードリング", hp: 0.62, speed: 1.65, scale: 0.55, contactDamage: 3, xp: 3, meshType: 1, meshSize: 0.66, trait: "swarm", tint: [0.2, 1, 0.55] },
+  "gravity-husk": { unlockLevel: 40, title: "グラビティハスク", hp: 1.8, speed: 0.76, scale: 1.16, contactDamage: 6, xp: 6, meshType: 2, meshSize: 1.08, trait: "siege", tint: [0.35, 0.08, 0.78] },
+  "vanta-stalker": { unlockLevel: 50, title: "ヴァンタストーカー", hp: 1.15, speed: 1.62, scale: 0.76, contactDamage: 6, xp: 6, meshType: 0, meshSize: 0.86, trait: "skirmish", tint: [0.08, 0.18, 0.34] },
+  "hex-warden": { unlockLevel: 50, title: "ヘックスウォーデン", hp: 2.8, speed: 0.54, scale: 1.44, contactDamage: 8, xp: 8, meshType: 1, meshSize: 1.3, trait: "armor", tint: [0.82, 0.18, 0.9] },
+  "ember-ram": { unlockLevel: 50, title: "エンバーラム", hp: 1.34, speed: 1.22, scale: 1.0, contactDamage: 8, xp: 7, meshType: 2, meshSize: 1.02, trait: "surge", tint: [1, 0.16, 0.02] },
+  "echo-swarm": { unlockLevel: 50, title: "エコースウォーム", hp: 0.56, speed: 1.9, scale: 0.48, contactDamage: 3, xp: 4, meshType: 0, meshSize: 0.62, trait: "swarm", tint: [0.05, 0.86, 0.92] },
+  "flux-guardian": { unlockLevel: 50, title: "フラックスガーディアン", hp: 2.2, speed: 0.72, scale: 1.28, contactDamage: 7, xp: 8, meshType: 1, meshSize: 1.18, trait: "pulse", tint: [0.92, 0.84, 0.08] },
+  "plasma-sower": { unlockLevel: 50, title: "プラズマソワー", hp: 1.48, speed: 0.86, scale: 1.1, contactDamage: 6, xp: 7, meshType: 2, meshSize: 1.05, trait: "pulse", tint: [0.16, 0.55, 1] },
+  "phase-razor": { unlockLevel: 50, title: "フェイズレイザー", hp: 0.94, speed: 1.72, scale: 0.7, contactDamage: 6, xp: 6, meshType: 0, meshSize: 0.9, trait: "drift", tint: [0.94, 0.1, 0.68] },
+  "abyss-harrier": { unlockLevel: 60, title: "アビスハリアー", hp: 1.36, speed: 1.54, scale: 0.86, contactDamage: 7, xp: 9, meshType: 0, meshSize: 0.98, trait: "skirmish", tint: [0.03, 0.38, 0.56] },
+  "nova-sentinel": { unlockLevel: 60, title: "ノヴァセンチネル", hp: 3.2, speed: 0.5, scale: 1.5, contactDamage: 9, xp: 12, meshType: 1, meshSize: 1.36, trait: "armor", tint: [1, 0.72, 0.12] },
+  "lattice-marauder": { unlockLevel: 60, title: "ラティスマローダー", hp: 1.76, speed: 1.1, scale: 1.12, contactDamage: 8, xp: 10, meshType: 2, meshSize: 1.1, trait: "siege", tint: [0.44, 1, 0.4] },
+  "cinder-golem": { unlockLevel: 60, title: "シンダーゴーレム", hp: 3.7, speed: 0.42, scale: 1.62, contactDamage: 10, xp: 13, meshType: 1, meshSize: 1.46, trait: "siege", tint: [0.92, 0.08, 0.02] },
+  "prism-revenant": { unlockLevel: 60, title: "プリズムレヴナント", hp: 1.24, speed: 1.68, scale: 0.78, contactDamage: 7, xp: 9, meshType: 0, meshSize: 0.96, trait: "drift", tint: [0.9, 0.96, 1] },
+  "void-archon": { unlockLevel: 60, title: "ヴォイドアーコン", hp: 2.65, speed: 0.68, scale: 1.4, contactDamage: 9, xp: 12, meshType: 2, meshSize: 1.26, trait: "pulse", tint: [0.34, 0.02, 0.54] },
+  "singularity-beast": { unlockLevel: 60, title: "シンギュラリティビースト", hp: 4.1, speed: 0.6, scale: 1.7, contactDamage: 11, xp: 15, meshType: 1, meshSize: 1.55, trait: "armor", tint: [0.08, 0.06, 0.12] },
+};
 type BossAction = "none" | "shockwave" | "charge" | "artillery" | "barrage";
 type StrikerAction = "none" | "windup" | "dash";
-type PlayerDamageSource = "idle-needle" | "contact" | "striker-dash" | "bulwark-barrage" | "bulwark-shockwave" | "bulwark-artillery" | "bulwark-charge" | "bulwark-destruction";
-type Enemy = { mesh: AbstractMesh; kind: EnemyKind; hp: number; maxHp: number; speed: number; scale: number; contactDamage: number; xpValue: number; healthFill?: AbstractMesh; hitFlash: number; orbitCooldown: number; cryoTime: number; corrosionTime: number; corrosionStacks: number; corrosionTick: number; corrosionMark?: AbstractMesh; enteringContainment: boolean; strikerAction: StrikerAction; strikerTimer: number; strikerCooldown: number; strikerVector: Vector3; strikerDashHit: boolean; strikerMarker?: AbstractMesh; bossAction: BossAction; bossTimer: number; bossCooldown: number; bossTarget: Vector3; bossVector: Vector3; bossChargeHit: boolean; bossBursts: number; bossEnraged: boolean; bossMarker?: AbstractMesh };
+type PlayerDamageSource = "idle-needle" | "contact" | "variant-pulse" | "striker-dash" | "bulwark-barrage" | "bulwark-shockwave" | "bulwark-artillery" | "bulwark-charge" | "bulwark-destruction";
+type Enemy = { mesh: AbstractMesh; kind: EnemyKind; hp: number; maxHp: number; speed: number; scale: number; contactDamage: number; xpValue: number; highVariant?: HighVariantId; variantTimer: number; variantBurst: number; variantAura?: AbstractMesh; healthFill?: AbstractMesh; hitFlash: number; orbitCooldown: number; cryoTime: number; corrosionTime: number; corrosionStacks: number; corrosionTick: number; corrosionMark?: AbstractMesh; enteringContainment: boolean; strikerAction: StrikerAction; strikerTimer: number; strikerCooldown: number; strikerVector: Vector3; strikerDashHit: boolean; strikerMarker?: AbstractMesh; bossAction: BossAction; bossTimer: number; bossCooldown: number; bossTarget: Vector3; bossVector: Vector3; bossChargeHit: boolean; bossBursts: number; bossEnraged: boolean; bossMarker?: AbstractMesh };
 type Projectile = { mesh: AbstractMesh; velocity: Vector3; damage: number; life: number; hitRadius: number };
 type Gem = { mesh: AbstractMesh; value: number };
 type RecoveryItem = { mesh: AbstractMesh; amount: number; life: number };
@@ -62,6 +89,7 @@ export class GameWorld {
   private readonly strikerMaterial: StandardMaterial;
   private readonly bulwarkMaterial: StandardMaterial;
   private readonly enemyEyeMaterial: StandardMaterial;
+  private readonly highVariantMaterials: Partial<Record<HighVariantId, StandardMaterial>> = {};
   private readonly projectileMaterial: StandardMaterial;
   private readonly gemMaterial: StandardMaterial;
   private readonly recoveryMaterial: StandardMaterial;
@@ -179,6 +207,7 @@ export class GameWorld {
     private readonly rerollPreview: number,
     private readonly levelPreview: number,
     private readonly balancePreviewLevel: number,
+    private readonly variantPreviewLevel: number,
   ) {
     this.enemyMaterial = this.makeMaterial("drone-shell", new Color3(0.025, 0.15, 0.17), new Color3(0.02, 0.85, 0.95));
     this.enemyMaterial.diffuseTexture = new Texture(GAME_ASSETS.dronePanel, scene, true, false);
@@ -304,6 +333,7 @@ export class GameWorld {
       this.setupCombatDebugScenario();
     }
     if (this.balancePreviewLevel >= 30) this.setupHighLevelBalancePreview(this.balancePreviewLevel);
+    if (this.variantPreviewLevel >= 40) this.setupHighVariantPreview(this.variantPreviewLevel);
     if (this.levelPreview >= 1) {
       this.setupLevelProgressionPreview(this.levelPreview);
       this.phase = "upgrade";
@@ -555,10 +585,11 @@ export class GameWorld {
     [...this.harpoons].forEach((harpoon) => { harpoon.mesh.dispose(); harpoon.cable.dispose(); });
     [...this.clusterCores].forEach((core) => core.mesh.dispose());
     [...this.clusterShards].forEach((shard) => shard.mesh.dispose());
-    [...this.enemies].forEach((enemy) => { enemy.strikerMarker?.dispose(); enemy.bossMarker?.dispose(); enemy.mesh.dispose(); });
+    [...this.enemies].forEach((enemy) => { enemy.variantAura?.dispose(); enemy.strikerMarker?.dispose(); enemy.bossMarker?.dispose(); enemy.mesh.dispose(); });
     this.enemyMaterial.dispose();
     this.strikerMaterial.dispose();
     this.bulwarkMaterial.dispose();
+    Object.values(this.highVariantMaterials).forEach((material) => material?.dispose());
     this.enemyEyeMaterial.dispose();
     this.projectileMaterial.dispose();
     this.gemMaterial.dispose();
@@ -710,6 +741,34 @@ export class GameWorld {
     this.spawnTimer = 0;
   }
 
+  private setupHighVariantPreview(level: number) {
+    this.level = level;
+    this.xpNeeded = 999;
+    this.spawnTimer = Number.POSITIVE_INFINITY;
+    this.damage = 0;
+    this.hasScatter = false;
+    this.hasOrbit = false;
+    this.orbitBlades.forEach((blade) => blade.dispose());
+    this.orbitBlades.length = 0;
+    this.sawBlades.forEach((blade) => blade.dispose());
+    this.sawBlades.length = 0;
+    for (const moduleId of Object.keys(this.moduleTiers) as ModuleId[]) this.moduleTiers[moduleId] = 0;
+    const unlockLevel = level >= 60 ? 60 : level >= 50 ? 50 : 40;
+    const variants = HIGH_VARIANT_IDS.filter((id) => HIGH_VARIANTS[id].unlockLevel === unlockLevel);
+    variants.forEach((variantId, index) => {
+      this.spawnEnemy(undefined, variantId);
+      const enemy = this.enemies[this.enemies.length - 1];
+      const theta = (index / variants.length) * Math.PI * 2;
+      enemy.mesh.position.copyFrom(this.player.position.add(new Vector3(Math.cos(theta) * 5.7, 0.8, Math.sin(theta) * 5.7)));
+      enemy.hp *= 20;
+      enemy.maxHp = enemy.hp;
+      enemy.speed = 0;
+      enemy.contactDamage = 0;
+      enemy.variantTimer = Number.POSITIVE_INFINITY;
+      enemy.enteringContainment = false;
+    });
+  }
+
   private getRecoverableDropPosition(position: Vector3) {
     const offset = position.subtract(this.player.position);
     offset.y = 0;
@@ -764,12 +823,17 @@ export class GameWorld {
     };
   }
 
-  private spawnEnemy(kindOverride?: EnemyKind) {
-    const kind = kindOverride ?? this.pickEnemyKind();
+  private spawnEnemy(kindOverride?: EnemyKind, highVariantOverride?: HighVariantId) {
+    const highVariant = highVariantOverride ?? this.pickHighVariant();
+    const kind = kindOverride ?? (highVariant ? "scout" : this.pickEnemyKind());
     const baseHp = 14 + Math.floor(this.elapsed / 25) * 4;
     const baseSpeed = 2.05 + Math.min(1.55, this.elapsed / 120);
     const experienceMultiplier = 1 + this.getHighLevelRewardTier() * 0.45;
-    const profile = kind === "striker"
+    const variantId = highVariant;
+    const variant = variantId ? HIGH_VARIANTS[variantId] : undefined;
+    const profile = variant && variantId
+      ? { hp: Math.ceil(baseHp * variant.hp), speed: baseSpeed * variant.speed, scale: variant.scale, contactDamage: variant.contactDamage, xpValue: Math.ceil(variant.xp * experienceMultiplier), material: this.getHighVariantMaterial(variantId), meshType: variant.meshType, meshSize: variant.meshSize }
+      : kind === "striker"
       ? { hp: Math.max(9, Math.ceil(baseHp * 0.7)), speed: baseSpeed * 1.65, scale: 0.72, contactDamage: 3, xpValue: Math.ceil(1 * experienceMultiplier), material: this.strikerMaterial, meshType: 0, meshSize: 0.92 }
       : kind === "bulwark"
         ? { hp: Math.ceil(baseHp * 3.1), speed: baseSpeed * 0.62, scale: 1.46, contactDamage: 7, xpValue: Math.ceil(4 * experienceMultiplier), material: this.bulwarkMaterial, meshType: 2, meshSize: 1.2 }
@@ -783,9 +847,25 @@ export class GameWorld {
     eye.parent = body;
     eye.position = new Vector3(0, 0.02, -0.48);
     eye.material = this.enemyEyeMaterial;
+    let variantAura: AbstractMesh | undefined;
+    if (highVariant) {
+      variantAura = MeshBuilder.CreateTorus("high-variant-aura", { diameter: 1.38 + profile.scale * 0.35, thickness: 0.055, tessellation: 24 }, this.scene);
+      variantAura.parent = body;
+      variantAura.position.y = -0.32;
+      variantAura.material = profile.material;
+    }
     const healthFill = kind === "bulwark" ? this.createBossHealthBar(body) : undefined;
-    this.enemies.push({ mesh: body, kind, hp: profile.hp, maxHp: profile.hp, speed: profile.speed, scale: profile.scale, contactDamage: profile.contactDamage, xpValue: profile.xpValue, healthFill, hitFlash: 0, orbitCooldown: 0, cryoTime: 0, corrosionTime: 0, corrosionStacks: 0, corrosionTick: 0, enteringContainment: true, strikerAction: "none", strikerTimer: 0, strikerCooldown: kind === "striker" ? 1.8 + Math.random() * 1.4 : 0, strikerVector: Vector3.Zero(), strikerDashHit: false, bossAction: "none", bossTimer: 0, bossCooldown: kind === "bulwark" ? 2.6 + Math.random() * 1.1 : 0, bossTarget: Vector3.Zero(), bossVector: Vector3.Zero(), bossChargeHit: false, bossBursts: 0, bossEnraged: false });
+    this.enemies.push({ mesh: body, kind, hp: profile.hp, maxHp: profile.hp, speed: profile.speed, scale: profile.scale, contactDamage: profile.contactDamage, xpValue: profile.xpValue, highVariant, variantTimer: 0.8 + Math.random() * 0.75, variantBurst: 0, variantAura, healthFill, hitFlash: 0, orbitCooldown: 0, cryoTime: 0, corrosionTime: 0, corrosionStacks: 0, corrosionTick: 0, enteringContainment: true, strikerAction: "none", strikerTimer: 0, strikerCooldown: kind === "striker" ? 1.8 + Math.random() * 1.4 : 0, strikerVector: Vector3.Zero(), strikerDashHit: false, bossAction: "none", bossTimer: 0, bossCooldown: kind === "bulwark" ? 2.6 + Math.random() * 1.1 : 0, bossTarget: Vector3.Zero(), bossVector: Vector3.Zero(), bossChargeHit: false, bossBursts: 0, bossEnraged: false });
     this.createWallBreach(ingress.breach, profile.material);
+  }
+
+  private getHighVariantMaterial(id: HighVariantId) {
+    const existing = this.highVariantMaterials[id];
+    if (existing) return existing;
+    const [r, g, b] = HIGH_VARIANTS[id].tint;
+    const material = this.makeMaterial(`variant-${id}`, new Color3(r * 0.22, g * 0.22, b * 0.22), new Color3(r, g, b));
+    this.highVariantMaterials[id] = material;
+    return material;
   }
 
   private createBossHealthBar(parent: AbstractMesh) {
@@ -807,6 +887,14 @@ export class GameWorld {
     if (this.elapsed < 60) return roll < 0.32 ? "striker" : "scout";
     if (this.elapsed < 110) return roll < 0.2 ? "bulwark" : roll < 0.58 ? "striker" : "scout";
     return roll < 0.32 ? "bulwark" : roll < 0.68 ? "striker" : "scout";
+  }
+
+  private pickHighVariant(): HighVariantId | undefined {
+    const chance = this.level >= 60 ? 0.5 : this.level >= 50 ? 0.4 : this.level >= 40 ? 0.3 : 0;
+    if (chance === 0 || Math.random() >= chance) return undefined;
+    const unlocked = HIGH_VARIANT_IDS.filter((id) => HIGH_VARIANTS[id].unlockLevel <= this.level);
+    if (unlocked.length === 0) return undefined;
+    return unlocked[Math.floor(Math.random() * unlocked.length)];
   }
 
   private updateCombat(delta: number) {
@@ -2293,6 +2381,7 @@ export class GameWorld {
           continue;
         }
       }
+      const variantSpeedMultiplier = this.updateHighVariantAction(enemy, !decoy, delta);
       const objective = decoy ? decoy.mesh.position : this.player.position;
       const direction = objective.subtract(enemy.mesh.position);
       direction.y = 0;
@@ -2300,18 +2389,54 @@ export class GameWorld {
       if (distance > 0.1) {
         direction.scaleInPlace(1 / distance);
         const corrosionSlow = enemy.corrosionTime > 0 ? Math.max(0.52, 0.9 - enemy.corrosionStacks * 0.07) : 1;
-        enemy.mesh.position.addInPlace(direction.scale(enemy.speed * (enemy.cryoTime > 0 ? 0.52 : corrosionSlow) * delta));
+        enemy.mesh.position.addInPlace(direction.scale(enemy.speed * variantSpeedMultiplier * (enemy.cryoTime > 0 ? 0.52 : corrosionSlow) * delta));
         enemy.mesh.rotation.y += delta * 3.6;
       }
       this.constrainEnemyToArena(enemy);
       enemy.hitFlash -= delta;
       enemy.mesh.scaling.setAll(enemy.scale * (enemy.hitFlash > 0 ? 1.18 : 1));
-      const enemyContactRadius = enemy.kind === "bulwark" ? 0.82 : enemy.kind === "striker" ? 0.4 : 0.58;
+      const enemyContactRadius = enemy.highVariant ? 0.44 + enemy.scale * 0.34 : enemy.kind === "bulwark" ? 0.82 : enemy.kind === "striker" ? 0.4 : 0.58;
       if (!decoy && distance < PLAYER_RING_RADIUS + enemyContactRadius && this.damageTimer <= 0) {
         this.damagePlayer(Math.min(9, enemy.contactDamage + Math.floor(this.elapsed / 70)), 0.6, "contact");
         if (this.phase === "gameover") return;
       }
     }
+  }
+
+  private updateHighVariantAction(enemy: Enemy, canThreatenPlayer: boolean, delta: number) {
+    if (!enemy.highVariant) return 1;
+    const config = HIGH_VARIANTS[enemy.highVariant];
+    enemy.variantTimer -= delta;
+    enemy.variantBurst = Math.max(0, enemy.variantBurst - delta);
+    if (enemy.variantAura) {
+      enemy.variantAura.rotation.y += delta * (3.4 + enemy.scale * 1.6);
+      enemy.variantAura.scaling.setAll(0.9 + Math.sin(this.elapsed * (5 + enemy.scale) + enemy.scale) * 0.1);
+    }
+    if (config.trait === "drift") enemy.mesh.position.y = 0.8 + Math.sin(this.elapsed * 4.2 + enemy.scale * 3) * 0.18;
+    if (enemy.variantTimer > 0) return config.trait === "surge" && enemy.variantBurst > 0 ? 2.1 : config.trait === "skirmish" && enemy.variantBurst > 0 ? 1.65 : config.trait === "swarm" ? 1.24 : 1;
+    enemy.variantTimer = config.trait === "pulse" ? 1.35 : config.trait === "siege" ? 1.75 : config.trait === "armor" ? 2.25 : 1.25 + Math.random() * 0.75;
+    if (config.trait === "surge" || config.trait === "skirmish") {
+      enemy.variantBurst = config.trait === "surge" ? 0.46 : 0.68;
+      return config.trait === "surge" ? 2.1 : 1.65;
+    }
+    if (config.trait === "pulse") {
+      const dx = this.player.position.x - enemy.mesh.position.x;
+      const dz = this.player.position.z - enemy.mesh.position.z;
+      const radius = 3.2 + enemy.scale * 1.1;
+      this.emitVariantPulse(enemy, radius, config.contactDamage);
+      if (canThreatenPlayer && dx * dx + dz * dz <= radius * radius && this.damageTimer <= 0) this.damagePlayer(Math.min(10, config.contactDamage), 0.58, "variant-pulse");
+    } else if (config.trait === "siege" || config.trait === "armor") {
+      this.emitVariantPulse(enemy, config.trait === "siege" ? 2.35 : 1.7, 0);
+    }
+    return config.trait === "swarm" ? 1.24 : 1;
+  }
+
+  private emitVariantPulse(enemy: Enemy, radius: number, damage: number) {
+    const wave = MeshBuilder.CreateTorus("variant-pulse-wave", { diameter: Math.max(0.86, radius * 0.42), thickness: 0.07, tessellation: 30 }, this.scene);
+    wave.position.copyFrom(enemy.mesh.position);
+    wave.position.y = 0.14;
+    wave.material = enemy.highVariant ? this.getHighVariantMaterial(enemy.highVariant) : this.enemyMaterial;
+    this.shockwaves.push({ mesh: wave, life: damage > 0 ? 0.34 : 0.24, maxLife: damage > 0 ? 0.34 : 0.24 });
   }
 
   private updateStrikerAction(enemy: Enemy, distracted: boolean, delta: number) {
@@ -2555,6 +2680,7 @@ export class GameWorld {
     // 破棄中に被弾反撃・腐食連鎖が発生しても、同一敵を再度破棄しないよう先に管理配列から外す。
     this.enemies.splice(index, 1);
     enemy.corrosionMark?.dispose();
+    enemy.variantAura?.dispose();
     enemy.strikerMarker?.dispose();
     enemy.bossMarker?.dispose();
     enemy.mesh.dispose();
@@ -2765,7 +2891,7 @@ export class GameWorld {
       rerollsRemaining: this.rerollsRemaining,
       enemyCount: this.enemies.length,
       moduleMilestone: this.isModuleMilestone(),
-      debugStatus: this.debugMode ? `${this.auditModule ? `AUDIT:${this.auditModule}` : this.balancePreviewLevel >= 30 ? `BAL:L${this.level} T${this.getHighLevelRewardTier()} CAP${this.getHighLevelSpawnProfile().enemyCap} B${this.getHighLevelSpawnProfile().batch} I${this.getHighLevelSpawnProfile().interval.toFixed(2)} XPx${(1 + this.getHighLevelRewardTier() * 0.45).toFixed(2)} R${(this.getRecoveryDropChance() * 100).toFixed(1)}% M${(this.getMagnetDropChance() * 100).toFixed(1)}%` : "DBG"} IN:${this.enemies.filter((enemy) => this.isInsideContainment(enemy)).length} OUT:${this.enemies.filter((enemy) => !this.isInsideContainment(enemy)).length} FIRE:${this.debugProjectilesFired} COL:${this.debugProjectileCollisions} HIT:${this.debugHits} KILL:${this.debugKills} ENTRY:${this.debugEntries} CRYO:${this.enemies.filter((enemy) => enemy.cryoTime > 0).length} COR:${this.enemies.filter((enemy) => enemy.corrosionTime > 0).length} DMG:${this.lastDamageSource}` : undefined,
+      debugStatus: this.debugMode ? `${this.auditModule ? `AUDIT:${this.auditModule}` : this.variantPreviewLevel >= 40 ? `VAR:L${this.level} SET${this.level >= 60 ? 3 : this.level >= 50 ? 2 : 1}/3 COUNT${this.enemies.filter((enemy) => enemy.highVariant).length}/7` : this.balancePreviewLevel >= 30 ? `BAL:L${this.level} T${this.getHighLevelRewardTier()} CAP${this.getHighLevelSpawnProfile().enemyCap} B${this.getHighLevelSpawnProfile().batch} I${this.getHighLevelSpawnProfile().interval.toFixed(2)} XPx${(1 + this.getHighLevelRewardTier() * 0.45).toFixed(2)} R${(this.getRecoveryDropChance() * 100).toFixed(1)}% M${(this.getMagnetDropChance() * 100).toFixed(1)}%` : "DBG"} IN:${this.enemies.filter((enemy) => this.isInsideContainment(enemy)).length} OUT:${this.enemies.filter((enemy) => !this.isInsideContainment(enemy)).length} VAR:${this.enemies.filter((enemy) => enemy.highVariant).length} FIRE:${this.debugProjectilesFired} COL:${this.debugProjectileCollisions} HIT:${this.debugHits} KILL:${this.debugKills} ENTRY:${this.debugEntries} CRYO:${this.enemies.filter((enemy) => enemy.cryoTime > 0).length} COR:${this.enemies.filter((enemy) => enemy.corrosionTime > 0).length} DMG:${this.lastDamageSource}` : undefined,
       attacks,
       upgrades: this.getUpgradeOptions(),
     });

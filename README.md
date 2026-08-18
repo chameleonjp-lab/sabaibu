@@ -43,7 +43,8 @@ pnpm build
 | `?debug` | 壁内外数、発射、衝突、命中、撃破、侵入、最終被弾原因を表示。 |
 | `?level=30` / `?level=31` / `?level=35` | Lv30以降の5Lv周期モジュール候補と所持枠を確認するレベル進行プレビュー。 |
 | `?balance=30` / `?balance=40` / `?balance=50` | 高レベル帯の敵密度、経験値倍率、回復・マグネット報酬をHUDで確認する戦闘プレビュー。 |
+| `?variants=40` / `?variants=50` / `?variants=60` | 各10Lv帯で追加される7種の高レベル敵変種を、安全な展示モードで確認するプレビュー。 |
 
 ## 同梱資料
 
-`combat_debug_report.md` は投射物命中不具合の調査・修正記録、`module_dps_report.md` は全モジュールの火力調整記録です。ゲーム開発の判断経緯は `PLAN.md`、`STRUCTURE.md`、`MEMORY.md`、`ASSETS.md`、`ideas.md` にまとめています。`todo.md` には完了済み実装と検証履歴を記録しています。
+`combat_debug_report.md` は投射物命中不具合の調査・修正記録、`module_dps_report.md` は全モジュールの火力調整記録、`high_level_balance_report.md` は高レベル帯の密度・報酬曲線、`high_level_variant_report.md` はLv40以降の敵変種群の設計・確認方法を記録します。ゲーム開発の判断経緯は `PLAN.md`、`STRUCTURE.md`、`MEMORY.md`、`ASSETS.md`、`ideas.md` にまとめています。`todo.md` には完了済み実装と検証履歴を記録しています。
