@@ -177,6 +177,7 @@ export class GameWorld {
     private readonly auditModule: ModuleId | undefined,
     private readonly debugMode: boolean,
     private readonly rerollPreview: number,
+    private readonly levelPreview: number,
   ) {
     this.enemyMaterial = this.makeMaterial("drone-shell", new Color3(0.025, 0.15, 0.17), new Color3(0.02, 0.85, 0.95));
     this.enemyMaterial.diffuseTexture = new Texture(GAME_ASSETS.dronePanel, scene, true, false);
@@ -301,7 +302,11 @@ export class GameWorld {
       this.xpNeeded = 999;
       this.setupCombatDebugScenario();
     }
-    if (this.forceModulePreview) {
+    if (this.levelPreview >= 1) {
+      this.setupLevelProgressionPreview(this.levelPreview);
+      this.phase = "upgrade";
+      this.prepareUpgradeChoices();
+    } else if (this.forceModulePreview) {
       this.level = 10;
       this.phase = "upgrade";
       this.prepareUpgradeChoices();
@@ -687,6 +692,14 @@ export class GameWorld {
       enemy.enteringContainment = false;
     }
     this.activateModule(moduleId);
+  }
+
+  private setupLevelProgressionPreview(level: number) {
+    this.level = level;
+    this.xpNeeded = 8 + this.level * 5;
+    if (level < 30) return;
+    const existingWeapons: ModuleId[] = ["vector", "nova", "mirage", "pylon", "ricochet"];
+    for (const moduleId of existingWeapons) this.moduleTiers[moduleId] = 1;
   }
 
   private getRecoverableDropPosition(position: Vector3) {
@@ -2716,6 +2729,7 @@ export class GameWorld {
       weaponLimit: this.getWeaponLimit(),
       rerollsRemaining: this.rerollsRemaining,
       enemyCount: this.enemies.length,
+      moduleMilestone: this.isModuleMilestone(),
       debugStatus: this.debugMode ? `${this.auditModule ? `AUDIT:${this.auditModule}` : "DBG"} IN:${this.enemies.filter((enemy) => this.isInsideContainment(enemy)).length} OUT:${this.enemies.filter((enemy) => !this.isInsideContainment(enemy)).length} FIRE:${this.debugProjectilesFired} COL:${this.debugProjectileCollisions} HIT:${this.debugHits} KILL:${this.debugKills} ENTRY:${this.debugEntries} CRYO:${this.enemies.filter((enemy) => enemy.cryoTime > 0).length} COR:${this.enemies.filter((enemy) => enemy.corrosionTime > 0).length} DMG:${this.lastDamageSource}` : undefined,
       attacks,
       upgrades: this.getUpgradeOptions(),
@@ -2724,6 +2738,10 @@ export class GameWorld {
 
   private prepareUpgradeChoices(excludedIds = new Set<UpgradeId>()) {
     this.moduleSelection = this.level >= 10;
+    if (this.isModuleMilestone()) {
+      this.upgradeOptions = this.pickModuleMilestoneOptions(excludedIds);
+      return;
+    }
     const pool = this.getUpgradeCandidatePool();
     const freshPool = pool.filter((option) => !excludedIds.has(option.id));
     this.upgradeOptions = this.pickRandomOptions(freshPool.length >= 3 ? freshPool : pool, 3);
@@ -2731,7 +2749,36 @@ export class GameWorld {
 
   private getUpgradeCandidatePool() {
     const catalog = this.level >= 10 ? UPGRADE_CATALOG : STANDARD_UPGRADES;
+    if (this.level >= 30) return catalog.filter((option) => this.canOfferExistingUpgrade(option));
     return catalog.filter((option) => this.canOfferUpgrade(option));
+  }
+
+  private pickModuleMilestoneOptions(excludedIds: Set<UpgradeId>) {
+    const modulePool = MODULE_UPGRADES.filter((option) => this.isModuleId(option.id) && this.moduleTiers[option.id] === 0 && this.canOfferUpgrade(option));
+    const weaponPool = modulePool.filter((option) => this.isModuleId(option.id) && this.isWeaponModule(option.id));
+    const freshWeaponPool = weaponPool.filter((option) => !excludedIds.has(option.id));
+    const candidates = freshWeaponPool.length >= 3 ? freshWeaponPool : weaponPool;
+    const selected = this.pickRandomOptions(candidates, 3);
+    if (selected.length < 3) {
+      const supportPool = modulePool.filter((option) => !selected.some((picked) => picked.id === option.id));
+      selected.push(...this.pickRandomOptions(supportPool, 3 - selected.length));
+    }
+    if (selected.length >= 3) return selected;
+    const existingPool = this.getExistingUpgradePool().filter((option) => !selected.some((picked) => picked.id === option.id));
+    selected.push(...this.pickRandomOptions(existingPool, 3 - selected.length));
+    return selected;
+  }
+
+  private canOfferExistingUpgrade(option: UpgradeOption) {
+    const id = option.id;
+    if (this.isModuleId(id)) return this.moduleTiers[id] > 0 && this.canOfferUpgrade(option);
+    if (id === "scatter") return this.hasScatter;
+    if (id === "orbit") return this.hasOrbit;
+    return this.canOfferUpgrade(option);
+  }
+
+  private getExistingUpgradePool() {
+    return UPGRADE_CATALOG.filter((option) => this.canOfferExistingUpgrade(option));
   }
 
   private canOfferUpgrade(option: UpgradeOption) {
@@ -2759,7 +2806,12 @@ export class GameWorld {
   }
 
   private getWeaponLimit() {
-    return 5 + Math.max(0, Math.floor(this.level / 10) - 2);
+    if (this.level < 30) return 5;
+    return 6 + Math.floor((this.level - 30) / 5);
+  }
+
+  private isModuleMilestone() {
+    return this.level >= 30 && this.level % 5 === 0;
   }
 
   private pickRandomOptions(options: UpgradeOption[], count: number) {
