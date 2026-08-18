@@ -10,7 +10,7 @@ import { GAME_ASSETS } from "@/game/assets";
 import { MODULE_UPGRADES, type GameSnapshot, type IconId, type ModuleId, type UpgradeId } from "@/game/types";
 
 const INITIAL_SNAPSHOT: GameSnapshot = {
-  phase: "playing", health: 100, maxHealth: 100, damageFlash: 0, xp: 0, xpNeeded: 9, level: 1, kills: 0, seconds: 0, weaponTier: 1, weaponCount: 0, weaponLimit: 5, rerollsRemaining: 3, enemyCount: 0, attacks: [], upgrades: [],
+  phase: "playing", health: 100, maxHealth: 100, damageFlash: 0, xp: 0, xpNeeded: 9, level: 1, kills: 0, seconds: 0, weaponTier: 1, weaponCount: 0, weaponLimit: 5, moduleMilestone: false, rerollsRemaining: 3, enemyCount: 0, attacks: [], upgrades: [],
 };
 
 const formatTime = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
