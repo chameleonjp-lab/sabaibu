@@ -17,7 +17,7 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { Scene } from "@babylonjs/core/scene";
 import { GAME_ASSETS } from "./assets";
 import { GameWorld } from "./GameWorld";
-import type { GameSnapshot, UpgradeId } from "./types";
+import type { GameSnapshot, ModuleId, UpgradeId } from "./types";
 
 export interface GameHandle {
   scene: Scene;
@@ -38,6 +38,7 @@ export interface GameSceneOptions {
   explosionPreview: boolean;
   bossExplosionPreview: boolean;
   bossExplosionFarPreview: boolean;
+  auditModule?: ModuleId;
   debugMode: boolean;
   rerollPreview: number;
   onSnapshot: (snapshot: GameSnapshot) => void;
@@ -163,7 +164,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     warningBand.material = containmentCapMaterial;
   });
 
-  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.debugMode, options.rerollPreview);
+  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview);
   scene.onBeforeRenderObservable.add(() => {
     const delta = Math.min(0.05, scene.getEngine().getDeltaTime() / 1000);
     const forward = camera.target.subtract(camera.position);

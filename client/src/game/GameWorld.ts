@@ -174,6 +174,7 @@ export class GameWorld {
     private readonly explosionPreview: boolean,
     private readonly bossExplosionPreview: boolean,
     private readonly bossExplosionFarPreview: boolean,
+    private readonly auditModule: ModuleId | undefined,
     private readonly debugMode: boolean,
     private readonly rerollPreview: number,
   ) {
@@ -294,7 +295,9 @@ export class GameWorld {
       previewBoss.maxHp = 1;
       previewBoss.enteringContainment = false;
     }
-    if (this.debugMode) {
+    if (this.auditModule) {
+      this.setupModuleAuditScenario(this.auditModule);
+    } else if (this.debugMode) {
       this.xpNeeded = 999;
       this.setupCombatDebugScenario();
     }
@@ -661,6 +664,31 @@ export class GameWorld {
     placeDebugEnemy(new Vector3(-11.5, 0.8, 5.5), 16, false);
   }
 
+  private setupModuleAuditScenario(moduleId: ModuleId) {
+    this.xpNeeded = 999;
+    this.spawnTimer = Number.POSITIVE_INFINITY;
+    this.damage = 28;
+    this.moduleTiers[moduleId] = 3;
+    const offsets = [
+      new Vector3(4.2, 0.8, 0),
+      new Vector3(5.4, 0.8, 2.1),
+      new Vector3(5.6, 0.8, -2.2),
+      new Vector3(7.2, 0.8, 0.6),
+      new Vector3(8.1, 0.8, -2.8),
+    ];
+    if (moduleId === "reactive") offsets[0] = new Vector3(1.35, 0.8, 0);
+    if (moduleId === "mine" || moduleId === "saw") offsets[0] = new Vector3(1.8, 0.8, 0);
+    for (const offset of offsets) {
+      this.spawnEnemy("scout");
+      const enemy = this.enemies[this.enemies.length - 1];
+      enemy.mesh.position.copyFrom(this.player.position.add(offset));
+      enemy.hp = 260;
+      enemy.maxHp = 260;
+      enemy.enteringContainment = false;
+    }
+    this.activateModule(moduleId);
+  }
+
   private getRecoverableDropPosition(position: Vector3) {
     const offset = position.subtract(this.player.position);
     offset.y = 0;
@@ -688,6 +716,7 @@ export class GameWorld {
   }
 
   private updateSpawning(delta: number) {
+    if (this.auditModule) return;
     this.spawnTimer -= delta;
     if (this.spawnTimer > 0) return;
     const enemyCap = 42 + Math.floor(Math.min(3, this.elapsed / 75)) * 10;
@@ -742,8 +771,9 @@ export class GameWorld {
   }
 
   private updateCombat(delta: number) {
+    const auditUsesRail = this.auditModule === "cryo" || this.auditModule === "corrosion";
     this.shootTimer -= delta;
-    if (this.shootTimer <= 0 && this.enemies.length > 0) {
+    if ((!this.auditModule || auditUsesRail) && this.shootTimer <= 0 && this.enemies.length > 0) {
       this.fireAtNearest();
       this.shootTimer = this.shotDelay;
     }
@@ -1315,7 +1345,7 @@ export class GameWorld {
       }
       for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
         const enemy = this.enemies[enemyIndex];
-        if (blade.hitTargets.has(enemy.mesh) || Vector3.DistanceSquared(enemy.mesh.position, blade.mesh.position) > 1.25) continue;
+        if (!this.isCombatTarget(enemy) || blade.hitTargets.has(enemy.mesh) || Vector3.DistanceSquared(enemy.mesh.position, blade.mesh.position) > 1.25) continue;
         blade.hitTargets.add(enemy.mesh);
         this.applyDamage(enemy, blade.damage);
         if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
@@ -1354,8 +1384,9 @@ export class GameWorld {
       this.applyDamage(target, 9 + tier * 7);
       visited.add(target.mesh);
       const targetIndex = this.enemies.indexOf(target);
+      const impact = target.mesh.position.clone();
       if (target.hp <= 0 && targetIndex >= 0) this.destroyEnemy(targetIndex);
-      origin = target.mesh.position.clone();
+      origin = impact;
       target = this.getNearestUnlinkedTarget(origin, visited, 8.5 + tier * 1.1);
     }
   }
@@ -2449,7 +2480,9 @@ export class GameWorld {
 
   private damagePlayer(amount: number, cooldown: number, source: PlayerDamageSource) {
     if (this.damageTimer > 0 || this.phase !== "playing") return;
-    this.health = Math.max(0, this.health - amount);
+    const reactiveMitigation = this.moduleTiers.reactive > 0 ? Math.min(0.36, this.moduleTiers.reactive * 0.12) : 0;
+    const finalDamage = Math.max(1, Math.ceil(amount * (1 - reactiveMitigation)));
+    this.health = Math.max(0, this.health - finalDamage);
     this.damageTimer = cooldown;
     this.lastDamageSource = source;
     this.damageFlash = Math.max(this.damageFlash, 0.46);
@@ -2683,7 +2716,7 @@ export class GameWorld {
       weaponLimit: this.getWeaponLimit(),
       rerollsRemaining: this.rerollsRemaining,
       enemyCount: this.enemies.length,
-      debugStatus: this.debugMode ? `DBG IN:${this.enemies.filter((enemy) => this.isInsideContainment(enemy)).length} OUT:${this.enemies.filter((enemy) => !this.isInsideContainment(enemy)).length} FIRE:${this.debugProjectilesFired} COL:${this.debugProjectileCollisions} HIT:${this.debugHits} KILL:${this.debugKills} ENTRY:${this.debugEntries} DMG:${this.lastDamageSource}` : undefined,
+      debugStatus: this.debugMode ? `${this.auditModule ? `AUDIT:${this.auditModule}` : "DBG"} IN:${this.enemies.filter((enemy) => this.isInsideContainment(enemy)).length} OUT:${this.enemies.filter((enemy) => !this.isInsideContainment(enemy)).length} FIRE:${this.debugProjectilesFired} COL:${this.debugProjectileCollisions} HIT:${this.debugHits} KILL:${this.debugKills} ENTRY:${this.debugEntries} CRYO:${this.enemies.filter((enemy) => enemy.cryoTime > 0).length} COR:${this.enemies.filter((enemy) => enemy.corrosionTime > 0).length} DMG:${this.lastDamageSource}` : undefined,
       attacks,
       upgrades: this.getUpgradeOptions(),
     });

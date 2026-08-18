@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { createGameScene, type GameHandle } from "@/game/scene";
 import { GAME_ASSETS } from "@/game/assets";
-import type { GameSnapshot, IconId, UpgradeId } from "@/game/types";
+import { MODULE_UPGRADES, type GameSnapshot, type IconId, type ModuleId, type UpgradeId } from "@/game/types";
 
 const INITIAL_SNAPSHOT: GameSnapshot = {
   phase: "playing", health: 100, maxHealth: 100, damageFlash: 0, xp: 0, xpNeeded: 9, level: 1, kills: 0, seconds: 0, weaponTier: 1, weaponCount: 0, weaponLimit: 5, rerollsRemaining: 3, enemyCount: 0, attacks: [], upgrades: [],
@@ -47,7 +47,9 @@ export default function GameCanvas() {
   const explosionPreview = searchParams.has("explosion");
   const bossExplosionPreview = searchParams.has("bossExplosion");
   const bossExplosionFarPreview = searchParams.has("bossExplosionFar");
-  const debugMode = searchParams.has("debug");
+  const auditValue = searchParams.get("audit");
+  const auditModule = MODULE_UPGRADES.some((option) => option.id === auditValue) ? auditValue as ModuleId : undefined;
+  const debugMode = searchParams.has("debug") || Boolean(auditModule);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -55,7 +57,7 @@ export default function GameCanvas() {
     startedRef.current = true;
     const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, adaptToDeviceRatio: true });
     let cancelled = false;
-    createGameScene(engine, canvas, { demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, debugMode, rerollPreview, onSnapshot: setSnapshot }).then((handle) => {
+    createGameScene(engine, canvas, { demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, auditModule, debugMode, rerollPreview, onSnapshot: setSnapshot }).then((handle) => {
       if (cancelled) {
         handle.dispose();
         return;
@@ -85,7 +87,7 @@ export default function GameCanvas() {
       engine.dispose();
       startedRef.current = false;
     };
-  }, [demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, debugMode, rerollPreview]);
+  }, [demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, auditModule, debugMode, rerollPreview]);
 
   const setDirection = (x: number, z: number) => handleRef.current?.setTouchDirection(x, z);
   const updateJoystick = (clientX: number, clientY: number) => {
