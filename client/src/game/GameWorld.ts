@@ -16,8 +16,9 @@ import { MODULE_UPGRADES, STANDARD_UPGRADES, UPGRADE_CATALOG, type AttackStatus,
 type EnemyKind = "scout" | "striker" | "bulwark";
 type BossAction = "none" | "shockwave" | "charge" | "artillery" | "barrage";
 type StrikerAction = "none" | "windup" | "dash";
-type Enemy = { mesh: AbstractMesh; kind: EnemyKind; hp: number; maxHp: number; speed: number; scale: number; contactDamage: number; xpValue: number; healthFill?: AbstractMesh; hitFlash: number; orbitCooldown: number; cryoTime: number; corrosionTime: number; corrosionStacks: number; corrosionTick: number; corrosionMark?: AbstractMesh; strikerAction: StrikerAction; strikerTimer: number; strikerCooldown: number; strikerVector: Vector3; strikerDashHit: boolean; strikerMarker?: AbstractMesh; bossAction: BossAction; bossTimer: number; bossCooldown: number; bossTarget: Vector3; bossVector: Vector3; bossChargeHit: boolean; bossBursts: number; bossEnraged: boolean; bossMarker?: AbstractMesh };
-type Projectile = { mesh: AbstractMesh; velocity: Vector3; damage: number; life: number };
+type PlayerDamageSource = "idle-needle" | "contact" | "striker-dash" | "bulwark-barrage" | "bulwark-shockwave" | "bulwark-artillery" | "bulwark-charge" | "bulwark-destruction";
+type Enemy = { mesh: AbstractMesh; kind: EnemyKind; hp: number; maxHp: number; speed: number; scale: number; contactDamage: number; xpValue: number; healthFill?: AbstractMesh; hitFlash: number; orbitCooldown: number; cryoTime: number; corrosionTime: number; corrosionStacks: number; corrosionTick: number; corrosionMark?: AbstractMesh; enteringContainment: boolean; strikerAction: StrikerAction; strikerTimer: number; strikerCooldown: number; strikerVector: Vector3; strikerDashHit: boolean; strikerMarker?: AbstractMesh; bossAction: BossAction; bossTimer: number; bossCooldown: number; bossTarget: Vector3; bossVector: Vector3; bossChargeHit: boolean; bossBursts: number; bossEnraged: boolean; bossMarker?: AbstractMesh };
+type Projectile = { mesh: AbstractMesh; velocity: Vector3; damage: number; life: number; hitRadius: number };
 type Gem = { mesh: AbstractMesh; value: number };
 type RecoveryItem = { mesh: AbstractMesh; amount: number; life: number };
 type MagnetItem = { mesh: AbstractMesh; life: number };
@@ -33,15 +34,22 @@ type EnergyTrace = { mesh: AbstractMesh; life: number; maxLife: number };
 type ProximityMine = { mesh: AbstractMesh; life: number; armed: number };
 type SkyfallStrike = { marker: AbstractMesh; target: Vector3; delay: number; radius: number; damage: number };
 type NeedleDrop = { mesh: AbstractMesh; target: Vector3; life: number; maxLife: number; damage: number };
+type IdleNeedle = { mesh: AbstractMesh; marker: AbstractMesh; target: Vector3; life: number; maxLife: number };
 type ChainHarpoon = { mesh: AbstractMesh; cable: AbstractMesh; target: Enemy; life: number; damage: number; latched: boolean };
 type ClusterCore = { mesh: AbstractMesh; target: Enemy; life: number; damage: number; fragments: number };
 type ClusterShard = { mesh: AbstractMesh; target: Enemy; life: number; damage: number };
 
-const PLAYER_SAFE_BOUND = 26;
+const PLAYER_SAFE_BOUND = 31;
+const ENEMY_ARENA_BOUND = 35;
+const CONTAINMENT_WALL_BOUND = 32.3;
 const MIN_COMBAT_RADIUS = 19;
+const INGRESS_TARGET_BUFFER = 17;
+const PROJECTILE_HEIGHT = 0.86;
 const DROP_LIFETIME = 14;
 const DROP_WARNING_WINDOW = 4.5;
 const DROP_FADE_WINDOW = 1.25;
+const RECOVERY_DROP_CHANCE = 0.06;
+const MAGNET_DROP_CHANCE = 0.065 / 3;
 const PLAYER_RING_RADIUS = 1.28;
 const MAX_REROLLS_PER_RUN = 3;
 
@@ -59,6 +67,8 @@ export class GameWorld {
   private readonly recoveryMaterial: StandardMaterial;
   private readonly magnetMaterial: StandardMaterial;
   private readonly ringMaterial: StandardMaterial;
+  private readonly idleNeedleRedMaterial: StandardMaterial;
+  private readonly idleNeedleWhiteMaterial: StandardMaterial;
   private readonly enemies: Enemy[] = [];
   private readonly projectiles: Projectile[] = [];
   private readonly gems: Gem[] = [];
@@ -78,6 +88,7 @@ export class GameWorld {
   private readonly mines: ProximityMine[] = [];
   private readonly skyfallStrikes: SkyfallStrike[] = [];
   private readonly needleDrops: NeedleDrop[] = [];
+  private readonly idleNeedles: IdleNeedle[] = [];
   private readonly sawBlades: AbstractMesh[] = [];
   private readonly harpoons: ChainHarpoon[] = [];
   private readonly clusterCores: ClusterCore[] = [];
@@ -107,7 +118,7 @@ export class GameWorld {
   private damage = 14;
   private shotDelay = 0.48;
   private playerSpeed = 8.5;
-  private magnetRadius = 4.4;
+  private magnetRadius = 5.2;
   private combatRadius = 22;
   private shootTimer = 0;
   private scatterTimer = 0;
@@ -138,6 +149,14 @@ export class GameWorld {
   private sawAngle = 0;
   private spawnTimer = 0;
   private damageTimer = 0;
+  private lastDamageSource: PlayerDamageSource | "none" = "none";
+  private idleSeconds = 0;
+  private idleStrikeCooldown = 0;
+  private debugHits = 0;
+  private debugKills = 0;
+  private debugEntries = 0;
+  private debugProjectilesFired = 0;
+  private debugProjectileCollisions = 0;
   private emitTimer = 0;
   private disposed = false;
   private readonly keyDown: (event: KeyboardEvent) => void;
@@ -151,12 +170,17 @@ export class GameWorld {
     private readonly forceModulePreview: boolean,
     private readonly bossPreview: boolean,
     private readonly strikerPreview: boolean,
+    private readonly idlePreview: boolean,
+    private readonly explosionPreview: boolean,
+    private readonly bossExplosionPreview: boolean,
+    private readonly bossExplosionFarPreview: boolean,
+    private readonly debugMode: boolean,
     private readonly rerollPreview: number,
   ) {
     this.enemyMaterial = this.makeMaterial("drone-shell", new Color3(0.025, 0.15, 0.17), new Color3(0.02, 0.85, 0.95));
     this.enemyMaterial.diffuseTexture = new Texture(GAME_ASSETS.dronePanel, scene, true, false);
     this.enemyMaterial.emissiveTexture = new Texture(GAME_ASSETS.dronePanel, scene, true, false);
-    this.strikerMaterial = this.makeMaterial("striker-shell", new Color3(0.36, 0.025, 0.11), new Color3(1, 0.08, 0.25));
+    this.strikerMaterial = this.makeMaterial("striker-shell", new Color3(0.28, 0.025, 0.01), new Color3(0.92, 0.075, 0.02));
     this.bulwarkMaterial = this.makeMaterial("bulwark-shell", new Color3(0.23, 0.14, 0.035), new Color3(1, 0.3, 0.025));
     this.enemyEyeMaterial = this.makeMaterial("drone-eye", new Color3(0.03, 0.3, 0.34), new Color3(0.18, 0.95, 1));
     this.projectileMaterial = this.makeMaterial("amber-bolt", new Color3(1, 0.28, 0.01), new Color3(1, 0.58, 0.02));
@@ -164,6 +188,8 @@ export class GameWorld {
     this.recoveryMaterial = this.makeMaterial("field-medkit", new Color3(0.64, 0.06, 0.025), new Color3(1, 0.18, 0.04));
     this.magnetMaterial = this.makeMaterial("xp-magnet", new Color3(0.035, 0.12, 0.68), new Color3(0.1, 0.42, 1));
     this.ringMaterial = this.makeMaterial("safety-ring", new Color3(0.9, 0.22, 0.015), new Color3(1, 0.5, 0.03));
+    this.idleNeedleRedMaterial = this.makeMaterial("idle-needle-red", new Color3(0.72, 0.015, 0.01), new Color3(1, 0.05, 0.025));
+    this.idleNeedleWhiteMaterial = this.makeMaterial("idle-needle-white", new Color3(0.92, 0.92, 0.86), new Color3(1, 0.95, 0.84));
 
     const suit = this.makeMaterial("responder-suit", new Color3(0.58, 0.52, 0.37), new Color3(0.22, 0.08, 0.005));
     const visor = this.makeMaterial("responder-visor", new Color3(0.12, 0.05, 0.01), new Color3(1, 0.52, 0.02));
@@ -249,6 +275,29 @@ export class GameWorld {
       striker.strikerVector.copyFrom(previewVector);
       striker.strikerMarker = this.createStrikerDashWarning(striker.mesh.position, striker.mesh.position.add(previewVector.scale(6.1)));
     }
+    if (this.idlePreview) {
+      this.launchIdleNeedle(this.player.position.clone(), 4.2);
+      this.idleStrikeCooldown = 9;
+    }
+    if (this.explosionPreview) {
+      this.spawnEnemy("scout");
+      const previewEnemy = this.enemies[this.enemies.length - 1];
+      previewEnemy.mesh.position.copyFrom(this.player.position.add(new Vector3(1.45, 0.8, 0)));
+      previewEnemy.hp = 1;
+      previewEnemy.maxHp = 1;
+    }
+    if (this.bossExplosionPreview || this.bossExplosionFarPreview) {
+      this.spawnEnemy("bulwark");
+      const previewBoss = this.enemies[this.enemies.length - 1];
+      previewBoss.mesh.position.copyFrom(this.player.position.add(new Vector3(this.bossExplosionFarPreview ? 4.2 : 1.55, 0.8, 0)));
+      previewBoss.hp = 1;
+      previewBoss.maxHp = 1;
+      previewBoss.enteringContainment = false;
+    }
+    if (this.debugMode) {
+      this.xpNeeded = 999;
+      this.setupCombatDebugScenario();
+    }
     if (this.forceModulePreview) {
       this.level = 10;
       this.phase = "upgrade";
@@ -267,8 +316,9 @@ export class GameWorld {
     if (this.tryAdvanceLevel()) return;
     const safeDelta = Math.min(delta, 0.05);
     this.elapsed += safeDelta;
-    this.updatePlayer(safeDelta);
+    const playerMoved = this.updatePlayer(safeDelta);
     this.updateDamageWarning(safeDelta);
+    this.updateIdleHazard(safeDelta, playerMoved);
     this.updateModules(safeDelta);
     this.updateSpawning(safeDelta);
     this.updateCombat(safeDelta);
@@ -338,6 +388,7 @@ export class GameWorld {
   }
 
   restart() {
+    [...this.idleNeedles].forEach((needle) => { needle.mesh.dispose(); needle.marker.dispose(); });
     [...this.enemies].forEach((enemy) => { enemy.strikerMarker?.dispose(); enemy.bossMarker?.dispose(); enemy.mesh.dispose(); });
     [...this.projectiles].forEach((projectile) => projectile.mesh.dispose());
     [...this.gems].forEach((gem) => gem.mesh.dispose());
@@ -380,6 +431,7 @@ export class GameWorld {
     this.mines.length = 0;
     this.skyfallStrikes.length = 0;
     this.needleDrops.length = 0;
+    this.idleNeedles.length = 0;
     this.sawBlades.length = 0;
     this.harpoons.length = 0;
     this.clusterCores.length = 0;
@@ -433,7 +485,7 @@ export class GameWorld {
     this.damage = 14;
     this.shotDelay = 0.48;
     this.playerSpeed = 8.5;
-    this.magnetRadius = 4.4;
+    this.magnetRadius = 5.2;
     this.shootTimer = 0;
     this.scatterTimer = 0;
     this.orbitAngle = 0;
@@ -463,11 +515,15 @@ export class GameWorld {
     this.sawAngle = 0;
     this.spawnTimer = 0;
     this.damageTimer = 0;
+    this.lastDamageSource = "none";
+    this.idleSeconds = 0;
+    this.idleStrikeCooldown = 0;
     this.emitSnapshot();
   }
 
   dispose() {
     this.disposed = true;
+    [...this.idleNeedles].forEach((needle) => { needle.mesh.dispose(); needle.marker.dispose(); });
     window.removeEventListener("keydown", this.keyDown);
     window.removeEventListener("keyup", this.keyUp);
     this.player.dispose();
@@ -499,11 +555,14 @@ export class GameWorld {
     this.recoveryMaterial.dispose();
     this.magnetMaterial.dispose();
     this.ringMaterial.dispose();
+    this.idleNeedleRedMaterial.dispose();
+    this.idleNeedleWhiteMaterial.dispose();
   }
 
   private updatePlayer(delta: number) {
     const move = this.demoMode ? this.getDemoDirection() : this.getInputDirection();
-    if (move.lengthSquared() > 0) {
+    const moved = move.lengthSquared() > 0.0004;
+    if (moved) {
       move.normalize();
       this.player.position.addInPlace(move.scale(this.playerSpeed * delta));
       this.player.rotation.y = Math.atan2(move.x, move.z);
@@ -511,6 +570,105 @@ export class GameWorld {
     this.player.position.x = Math.max(-PLAYER_SAFE_BOUND, Math.min(PLAYER_SAFE_BOUND, this.player.position.x));
     this.player.position.z = Math.max(-PLAYER_SAFE_BOUND, Math.min(PLAYER_SAFE_BOUND, this.player.position.z));
     this.playerCore.rotation.y += delta * 3;
+    return moved;
+  }
+
+  private updateIdleHazard(delta: number, playerMoved: boolean) {
+    if (playerMoved) this.idleSeconds = 0;
+    else this.idleSeconds += delta;
+    this.idleStrikeCooldown = Math.max(0, this.idleStrikeCooldown - delta);
+    if (this.idleSeconds >= 5 && this.idleStrikeCooldown <= 0) {
+      this.launchIdleNeedle(this.player.position.clone());
+      this.idleSeconds = 0;
+      this.idleStrikeCooldown = 0.7;
+    }
+    for (let index = this.idleNeedles.length - 1; index >= 0; index -= 1) {
+      const needle = this.idleNeedles[index];
+      needle.life -= delta;
+      const progress = 1 - Math.max(0, needle.life) / needle.maxLife;
+      const whitePhase = Math.floor(this.elapsed * 14 + index) % 2 === 0;
+      const material = whitePhase ? this.idleNeedleWhiteMaterial : this.idleNeedleRedMaterial;
+      needle.mesh.material = material;
+      needle.marker.material = material;
+      needle.mesh.position.x = needle.target.x;
+      needle.mesh.position.z = needle.target.z;
+      needle.mesh.position.y = 0.58 + (1 - progress) * 8.8;
+      needle.mesh.scaling.y = 0.9 + progress * 0.32;
+      needle.marker.scaling.setAll(0.72 + Math.sin(this.elapsed * 17) * 0.11 + progress * 0.22);
+      if (needle.life > 0) continue;
+      if (Vector3.DistanceSquared(this.player.position, needle.target) <= 1.05 * 1.05) this.damagePlayer(20, 0.45, "idle-needle");
+      const impact = MeshBuilder.CreateTorus("idle-needle-impact", { diameter: 0.68, thickness: 0.12, tessellation: 28 }, this.scene);
+      impact.position.copyFrom(needle.target);
+      impact.position.y = 0.15;
+      impact.material = this.idleNeedleRedMaterial;
+      this.shockwaves.push({ mesh: impact, life: 0.32, maxLife: 0.32 });
+      needle.mesh.dispose();
+      needle.marker.dispose();
+      this.idleNeedles.splice(index, 1);
+    }
+  }
+
+  private launchIdleNeedle(target: Vector3, fallDuration = 2) {
+    const marker = MeshBuilder.CreateTorus("idle-needle-warning", { diameter: 2.05, thickness: 0.095, tessellation: 28 }, this.scene);
+    marker.position.copyFrom(target);
+    marker.position.y = 0.12;
+    marker.material = this.idleNeedleRedMaterial;
+    const needle = MeshBuilder.CreateCylinder("idle-needle", { height: 2.25, diameterTop: 0.06, diameterBottom: 0.38, tessellation: 6 }, this.scene);
+    needle.position.copyFrom(target.add(new Vector3(0, 9.38, 0)));
+    needle.material = this.idleNeedleWhiteMaterial;
+    this.idleNeedles.push({ mesh: needle, marker, target, life: fallDuration, maxLife: fallDuration });
+  }
+
+  private clampToArena(position: Vector3, bound: number) {
+    position.x = Math.max(-bound, Math.min(bound, position.x));
+    position.z = Math.max(-bound, Math.min(bound, position.z));
+    return position;
+  }
+
+  private constrainEnemyToArena(enemy: Enemy) {
+    this.clampToArena(enemy.mesh.position, ENEMY_ARENA_BOUND);
+  }
+
+  private getWallIngressPosition() {
+    const laneLimit = CONTAINMENT_WALL_BOUND - 4.5;
+    const lane = (Math.random() * 2 - 1) * laneLimit;
+    const exterior = ENEMY_ARENA_BOUND - 0.18;
+    const side = Math.floor(Math.random() * 4);
+    if (side === 0) return { spawn: new Vector3(exterior, 0.8, lane), breach: new Vector3(CONTAINMENT_WALL_BOUND, 0.12, lane) };
+    if (side === 1) return { spawn: new Vector3(-exterior, 0.8, lane), breach: new Vector3(-CONTAINMENT_WALL_BOUND, 0.12, lane) };
+    if (side === 2) return { spawn: new Vector3(lane, 0.8, exterior), breach: new Vector3(lane, 0.12, CONTAINMENT_WALL_BOUND) };
+    return { spawn: new Vector3(lane, 0.8, -exterior), breach: new Vector3(lane, 0.12, -CONTAINMENT_WALL_BOUND) };
+  }
+
+  private createWallBreach(position: Vector3, material: StandardMaterial) {
+    const breach = MeshBuilder.CreateTorus("containment-breach", { diameter: 0.78, thickness: 0.11, tessellation: 24 }, this.scene);
+    breach.position.copyFrom(position);
+    breach.material = material;
+    this.shockwaves.push({ mesh: breach, life: 0.52, maxLife: 0.52 });
+  }
+
+  private setupCombatDebugScenario() {
+    const placeDebugEnemy = (offset: Vector3, hp: number, enteringContainment: boolean) => {
+      this.spawnEnemy("scout");
+      const enemy = this.enemies[this.enemies.length - 1];
+      enemy.mesh.position.copyFrom(this.player.position.add(offset));
+      enemy.hp = hp;
+      enemy.maxHp = hp;
+      enemy.enteringContainment = enteringContainment;
+    };
+    placeDebugEnemy(new Vector3(7.4, 0.8, 0), 8, false);
+    placeDebugEnemy(new Vector3(0, 0.8, CONTAINMENT_WALL_BOUND + 1.2), 12, true);
+    placeDebugEnemy(new Vector3(-11.5, 0.8, 5.5), 16, false);
+  }
+
+  private getRecoverableDropPosition(position: Vector3) {
+    const offset = position.subtract(this.player.position);
+    offset.y = 0;
+    const maximumDistance = Math.min(13.5, Math.max(8, this.combatRadius * 0.82));
+    if (offset.lengthSquared() > maximumDistance * maximumDistance) offset.normalize().scaleInPlace(maximumDistance);
+    const reachable = this.player.position.add(offset);
+    reachable.y = 0;
+    return this.clampToArena(reachable, PLAYER_SAFE_BOUND - 0.7);
   }
 
   private getInputDirection() {
@@ -548,10 +706,9 @@ export class GameWorld {
       : kind === "bulwark"
         ? { hp: Math.ceil(baseHp * 3.1), speed: baseSpeed * 0.62, scale: 1.46, contactDamage: 7, xpValue: 4, material: this.bulwarkMaterial, meshType: 2, meshSize: 1.2 }
         : { hp: baseHp, speed: baseSpeed, scale: 1, contactDamage: 4, xpValue: 2, material: this.enemyMaterial, meshType: 1, meshSize: 1.05 };
-    const angle = Math.random() * Math.PI * 2;
-    const distance = 18 + Math.random() * 12;
+    const ingress = this.getWallIngressPosition();
     const body = MeshBuilder.CreatePolyhedron(`${kind}-drone`, { type: profile.meshType, size: profile.meshSize }, this.scene);
-    body.position = this.player.position.add(new Vector3(Math.cos(angle) * distance, 0.8, Math.sin(angle) * distance));
+    body.position.copyFrom(ingress.spawn);
     body.material = profile.material;
     body.scaling.setAll(profile.scale);
     const eye = MeshBuilder.CreateSphere("drone-sensor", { diameter: 0.3, segments: 6 }, this.scene);
@@ -559,7 +716,8 @@ export class GameWorld {
     eye.position = new Vector3(0, 0.02, -0.48);
     eye.material = this.enemyEyeMaterial;
     const healthFill = kind === "bulwark" ? this.createBossHealthBar(body) : undefined;
-    this.enemies.push({ mesh: body, kind, hp: profile.hp, maxHp: profile.hp, speed: profile.speed, scale: profile.scale, contactDamage: profile.contactDamage, xpValue: profile.xpValue, healthFill, hitFlash: 0, orbitCooldown: 0, cryoTime: 0, corrosionTime: 0, corrosionStacks: 0, corrosionTick: 0, strikerAction: "none", strikerTimer: 0, strikerCooldown: kind === "striker" ? 1.8 + Math.random() * 1.4 : 0, strikerVector: Vector3.Zero(), strikerDashHit: false, bossAction: "none", bossTimer: 0, bossCooldown: kind === "bulwark" ? 2.6 + Math.random() * 1.1 : 0, bossTarget: Vector3.Zero(), bossVector: Vector3.Zero(), bossChargeHit: false, bossBursts: 0, bossEnraged: false });
+    this.enemies.push({ mesh: body, kind, hp: profile.hp, maxHp: profile.hp, speed: profile.speed, scale: profile.scale, contactDamage: profile.contactDamage, xpValue: profile.xpValue, healthFill, hitFlash: 0, orbitCooldown: 0, cryoTime: 0, corrosionTime: 0, corrosionStacks: 0, corrosionTick: 0, enteringContainment: true, strikerAction: "none", strikerTimer: 0, strikerCooldown: kind === "striker" ? 1.8 + Math.random() * 1.4 : 0, strikerVector: Vector3.Zero(), strikerDashHit: false, bossAction: "none", bossTimer: 0, bossCooldown: kind === "bulwark" ? 2.6 + Math.random() * 1.1 : 0, bossTarget: Vector3.Zero(), bossVector: Vector3.Zero(), bossChargeHit: false, bossBursts: 0, bossEnraged: false });
+    this.createWallBreach(ingress.breach, profile.material);
   }
 
   private createBossHealthBar(parent: AbstractMesh) {
@@ -603,9 +761,15 @@ export class GameWorld {
         this.projectiles.splice(i, 1);
         continue;
       }
-      const enemyIndex = this.enemies.findIndex((enemy) => this.isCombatTarget(enemy) && Vector3.DistanceSquared(enemy.mesh.position, projectile.mesh.position) < 1.1);
+      const enemyIndex = this.enemies.findIndex((enemy) => {
+        if (!this.isCombatTarget(enemy)) return false;
+        const dx = enemy.mesh.position.x - projectile.mesh.position.x;
+        const dz = enemy.mesh.position.z - projectile.mesh.position.z;
+        return dx * dx + dz * dz <= projectile.hitRadius * projectile.hitRadius;
+      });
       if (enemyIndex >= 0) {
         const enemy = this.enemies[enemyIndex];
+        if (this.debugMode) this.debugProjectileCollisions += 1;
         this.applyDamage(enemy, projectile.damage);
         enemy.hitFlash = 0.12;
         projectile.mesh.dispose();
@@ -655,13 +819,25 @@ export class GameWorld {
 
   private spawnBolt(direction: Vector3, speed: number, damage: number, diameter: number) {
     const bolt = MeshBuilder.CreateSphere("rail-bolt", { diameter, segments: 6 }, this.scene);
-    bolt.position = this.player.position.add(new Vector3(0, 1.08, 0)).add(direction.scale(0.7));
+    bolt.position = this.player.position.add(direction.scale(0.7));
+    bolt.position.y = PROJECTILE_HEIGHT;
     bolt.material = this.projectileMaterial;
-    this.projectiles.push({ mesh: bolt, velocity: direction.scale(speed), damage, life: 1.35 });
+    this.projectiles.push({ mesh: bolt, velocity: direction.scale(speed), damage, life: 2.2, hitRadius: 0.76 + diameter });
+    if (this.debugMode) this.debugProjectilesFired += 1;
+  }
+
+  private getTargetingRadius() {
+    return this.combatRadius + INGRESS_TARGET_BUFFER;
+  }
+
+  private isInsideContainment(enemy: Enemy) {
+    const interiorBound = CONTAINMENT_WALL_BOUND - 0.62;
+    return Math.abs(enemy.mesh.position.x) <= interiorBound && Math.abs(enemy.mesh.position.z) <= interiorBound;
   }
 
   private isCombatTarget(enemy: Enemy) {
-    return Vector3.DistanceSquared(enemy.mesh.position, this.player.position) <= this.combatRadius * this.combatRadius;
+    const targetRadius = this.getTargetingRadius();
+    return this.isInsideContainment(enemy) && Vector3.DistanceSquared(enemy.mesh.position, this.player.position) <= targetRadius * targetRadius;
   }
 
   private activateModule(id: ModuleId) {
@@ -1859,7 +2035,7 @@ export class GameWorld {
     }
   }
 
-  private getNearestTarget(origin: Vector3, maxDistance = this.combatRadius) {
+  private getNearestTarget(origin: Vector3, maxDistance = this.getTargetingRadius()) {
     let target: Enemy | undefined;
     let nearest = maxDistance * maxDistance;
     for (const enemy of this.enemies) {
@@ -1872,12 +2048,16 @@ export class GameWorld {
 
   private spawnBoltFrom(origin: Vector3, direction: Vector3, speed: number, damage: number, diameter: number) {
     const bolt = MeshBuilder.CreateSphere("module-bolt", { diameter, segments: 6 }, this.scene);
-    bolt.position = origin.add(new Vector3(0, 0.72, 0)).add(direction.scale(0.55));
+    bolt.position = origin.add(direction.scale(0.55));
+    bolt.position.y = PROJECTILE_HEIGHT;
     bolt.material = this.projectileMaterial;
-    this.projectiles.push({ mesh: bolt, velocity: direction.scale(speed), damage, life: 1.35 });
+    this.projectiles.push({ mesh: bolt, velocity: direction.scale(speed), damage, life: 1.35, hitRadius: 0.76 + diameter });
+    if (this.debugMode) this.debugProjectilesFired += 1;
   }
 
   private applyDamage(enemy: Enemy, damage: number, skipCorrosion = false) {
+    if (!this.isCombatTarget(enemy)) return;
+    if (this.debugMode) this.debugHits += 1;
     enemy.hp -= damage;
     if (!skipCorrosion && this.moduleTiers.corrosion > 0) this.applyCorrosion(enemy);
     if (this.moduleTiers.cryo > 0) enemy.cryoTime = Math.max(enemy.cryoTime, 0.75 + this.moduleTiers.cryo * 0.42);
@@ -1995,14 +2175,48 @@ export class GameWorld {
     }
   }
 
+  private updateEnemyIngress(enemy: Enemy, delta: number) {
+    const direction = this.player.position.subtract(enemy.mesh.position);
+    direction.y = 0;
+    const distance = direction.length();
+    if (distance > 0.1) {
+      direction.scaleInPlace(1 / distance);
+      const corrosionSlow = enemy.corrosionTime > 0 ? Math.max(0.52, 0.9 - enemy.corrosionStacks * 0.07) : 1;
+      enemy.mesh.position.addInPlace(direction.scale(enemy.speed * 3.6 * (enemy.cryoTime > 0 ? 0.52 : corrosionSlow) * delta));
+      enemy.mesh.rotation.y += delta * 3.6;
+    }
+    this.constrainEnemyToArena(enemy);
+    if (!this.isInsideContainment(enemy)) return;
+    enemy.enteringContainment = false;
+    if (this.debugMode) this.debugEntries += 1;
+  }
+
+  private removeDefeatedEnemies() {
+    for (let index = this.enemies.length - 1; index >= 0; index -= 1) {
+      if (this.enemies[index].hp <= 0) this.destroyEnemy(index);
+    }
+  }
+
   private updateEnemies(delta: number) {
     this.damageTimer -= delta;
+    this.removeDefeatedEnemies();
     for (const enemy of this.enemies) {
+      enemy.cryoTime = Math.max(0, enemy.cryoTime - delta);
+      if (enemy.enteringContainment) {
+        this.updateEnemyIngress(enemy, delta);
+        continue;
+      }
       const decoy = this.getDecoyTarget(enemy);
-      if (enemy.kind === "striker" && this.updateStrikerAction(enemy, Boolean(decoy), delta)) continue;
+      if (enemy.kind === "striker" && this.updateStrikerAction(enemy, Boolean(decoy), delta)) {
+        this.constrainEnemyToArena(enemy);
+        continue;
+      }
       if (enemy.kind === "bulwark") {
         if (!enemy.bossEnraged && enemy.hp / enemy.maxHp <= 0.52) this.triggerBulwarkOverdrive(enemy);
-        if (this.updateBulwarkAction(enemy, delta)) continue;
+        if (this.updateBulwarkAction(enemy, delta)) {
+          this.constrainEnemyToArena(enemy);
+          continue;
+        }
         enemy.bossCooldown -= delta;
         if (!decoy && enemy.bossCooldown <= 0) {
           this.prepareBulwarkAction(enemy);
@@ -2015,16 +2229,16 @@ export class GameWorld {
       const distance = direction.length();
       if (distance > 0.1) {
         direction.scaleInPlace(1 / distance);
-        enemy.cryoTime = Math.max(0, enemy.cryoTime - delta);
         const corrosionSlow = enemy.corrosionTime > 0 ? Math.max(0.52, 0.9 - enemy.corrosionStacks * 0.07) : 1;
         enemy.mesh.position.addInPlace(direction.scale(enemy.speed * (enemy.cryoTime > 0 ? 0.52 : corrosionSlow) * delta));
         enemy.mesh.rotation.y += delta * 3.6;
       }
+      this.constrainEnemyToArena(enemy);
       enemy.hitFlash -= delta;
       enemy.mesh.scaling.setAll(enemy.scale * (enemy.hitFlash > 0 ? 1.18 : 1));
       const enemyContactRadius = enemy.kind === "bulwark" ? 0.82 : enemy.kind === "striker" ? 0.4 : 0.58;
       if (!decoy && distance < PLAYER_RING_RADIUS + enemyContactRadius && this.damageTimer <= 0) {
-        this.damagePlayer(Math.min(9, enemy.contactDamage + Math.floor(this.elapsed / 70)), 0.6);
+        this.damagePlayer(Math.min(9, enemy.contactDamage + Math.floor(this.elapsed / 70)), 0.6, "contact");
         if (this.phase === "gameover") return;
       }
     }
@@ -2064,7 +2278,7 @@ export class GameWorld {
     enemy.mesh.rotation.y = Math.atan2(enemy.strikerVector.x, enemy.strikerVector.z);
     if (!enemy.strikerDashHit && Vector3.DistanceSquared(this.player.position, enemy.mesh.position) < 1.6 * 1.6) {
       enemy.strikerDashHit = true;
-      this.damagePlayer(8 + Math.floor(this.elapsed / 105), 0.45);
+      this.damagePlayer(8 + Math.floor(this.elapsed / 105), 0.45, "striker-dash");
     }
     if (enemy.strikerTimer > 0) return true;
     const dashWave = MeshBuilder.CreateTorus("striker-dash-end", { diameter: 0.4, thickness: 0.065, tessellation: 20 }, this.scene);
@@ -2151,7 +2365,7 @@ export class GameWorld {
       wave.position.y = 0.16;
       wave.material = this.gemMaterial;
       this.shockwaves.push({ mesh: wave, life: 0.32, maxLife: 0.32 });
-      if (Vector3.DistanceSquared(this.player.position, enemy.bossTarget) <= radius * radius) this.damagePlayer(10 + Math.floor(this.elapsed / 105), 0.42);
+      if (Vector3.DistanceSquared(this.player.position, enemy.bossTarget) <= radius * radius) this.damagePlayer(10 + Math.floor(this.elapsed / 105), 0.42, "bulwark-barrage");
       enemy.bossBursts -= 1;
       if (enemy.bossBursts <= 0) {
         this.finishBulwarkAction(enemy, 5.5);
@@ -2175,7 +2389,7 @@ export class GameWorld {
       wave.position.y = 0.18;
       wave.material = this.recoveryMaterial;
       this.shockwaves.push({ mesh: wave, life: 0.46, maxLife: 0.46 });
-      if (Vector3.DistanceSquared(this.player.position, enemy.mesh.position) <= radius * radius) this.damagePlayer(12 + Math.floor(this.elapsed / 95), 0.48);
+      if (Vector3.DistanceSquared(this.player.position, enemy.mesh.position) <= radius * radius) this.damagePlayer(12 + Math.floor(this.elapsed / 95), 0.48, "bulwark-shockwave");
       this.finishBulwarkAction(enemy, 4.4);
       return true;
     }
@@ -2193,7 +2407,7 @@ export class GameWorld {
       wave.position.y = 0.16;
       wave.material = this.recoveryMaterial;
       this.shockwaves.push({ mesh: wave, life: 0.42, maxLife: 0.42 });
-      if (Vector3.DistanceSquared(this.player.position, enemy.bossTarget) <= 3.15 * 3.15) this.damagePlayer(14 + Math.floor(this.elapsed / 85), 0.52);
+      if (Vector3.DistanceSquared(this.player.position, enemy.bossTarget) <= 3.15 * 3.15) this.damagePlayer(14 + Math.floor(this.elapsed / 85), 0.52, "bulwark-artillery");
       this.finishBulwarkAction(enemy, 4.8);
       return true;
     }
@@ -2210,7 +2424,7 @@ export class GameWorld {
     enemy.mesh.position.addInPlace(enemy.bossVector.scale((13.5 + Math.min(2.5, this.elapsed / 100)) * delta));
     if (!enemy.bossChargeHit && Vector3.DistanceSquared(this.player.position, enemy.mesh.position) < 1.85 * 1.85) {
       enemy.bossChargeHit = true;
-      this.damagePlayer(16 + Math.floor(this.elapsed / 80), 0.42);
+      this.damagePlayer(16 + Math.floor(this.elapsed / 80), 0.42, "bulwark-charge");
     }
     if (enemy.bossTimer < 0) return true;
     this.finishBulwarkAction(enemy, 5.1);
@@ -2233,10 +2447,11 @@ export class GameWorld {
     enemy.bossCooldown = cooldown + Math.random() * 1.2;
   }
 
-  private damagePlayer(amount: number, cooldown: number) {
+  private damagePlayer(amount: number, cooldown: number, source: PlayerDamageSource) {
     if (this.damageTimer > 0 || this.phase !== "playing") return;
     this.health = Math.max(0, this.health - amount);
     this.damageTimer = cooldown;
+    this.lastDamageSource = source;
     this.damageFlash = Math.max(this.damageFlash, 0.46);
     if (this.moduleTiers.reactive > 0) this.triggerReactiveWave(this.moduleTiers.reactive);
     if (this.health > 0) {
@@ -2262,22 +2477,37 @@ export class GameWorld {
 
   private destroyEnemy(index: number) {
     const enemy = this.enemies[index];
+    if (!enemy || enemy.hp > 0) return;
     const position = enemy.mesh.position.clone();
+    const dropPosition = this.getRecoverableDropPosition(position);
+    // 破棄中に被弾反撃・腐食連鎖が発生しても、同一敵を再度破棄しないよう先に管理配列から外す。
+    this.enemies.splice(index, 1);
     enemy.corrosionMark?.dispose();
     enemy.strikerMarker?.dispose();
     enemy.bossMarker?.dispose();
     enemy.mesh.dispose();
-    this.enemies.splice(index, 1);
     this.kills += 1;
+    if (this.debugMode) this.debugKills += 1;
+    if (enemy.kind === "bulwark") {
+      const blastRadius = 2.6;
+      const explosion = MeshBuilder.CreateTorus("bulwark-destruction-blast", { diameter: 0.92, thickness: 0.16, tessellation: 28 }, this.scene);
+      explosion.position.copyFrom(position);
+      explosion.position.y = 0.18;
+      explosion.material = this.recoveryMaterial;
+      this.shockwaves.push({ mesh: explosion, life: 0.44, maxLife: 0.44 });
+      const dx = this.player.position.x - position.x;
+      const dz = this.player.position.z - position.z;
+      if (dx * dx + dz * dz <= blastRadius * blastRadius) this.damagePlayer(10, 0.42, "bulwark-destruction");
+    }
     const gem = MeshBuilder.CreateCylinder("energy-shard", { height: 0.42, diameterTop: 0.08, diameterBottom: 0.4, tessellation: 6 }, this.scene);
-    gem.position = new Vector3(position.x, 0.33, position.z);
+    gem.position = new Vector3(dropPosition.x, 0.33, dropPosition.z);
     gem.rotation.x = Math.PI;
     gem.material = this.gemMaterial;
     this.gems.push({ mesh: gem, value: enemy.xpValue });
-    const shouldDropRecovery = this.health < this.maxHealth && (this.demoMode || Math.random() < 0.18);
-    if (shouldDropRecovery) this.createRecoveryItem(position);
-    const shouldDropMagnet = (this.demoMode && this.kills === 1) || Math.random() < 0.065;
-    if (shouldDropMagnet) this.createMagnetItem(position.add(new Vector3(0.5, 0, -0.5)));
+    const shouldDropRecovery = this.health < this.maxHealth && Math.random() < RECOVERY_DROP_CHANCE;
+    if (shouldDropRecovery) this.createRecoveryItem(dropPosition);
+    const shouldDropMagnet = Math.random() < MAGNET_DROP_CHANCE;
+    if (shouldDropMagnet) this.createMagnetItem(this.getRecoverableDropPosition(dropPosition.add(new Vector3(0.5, 0, -0.5))));
   }
 
   private createRecoveryItem(position: Vector3, life = DROP_LIFETIME) {
@@ -2453,6 +2683,7 @@ export class GameWorld {
       weaponLimit: this.getWeaponLimit(),
       rerollsRemaining: this.rerollsRemaining,
       enemyCount: this.enemies.length,
+      debugStatus: this.debugMode ? `DBG IN:${this.enemies.filter((enemy) => this.isInsideContainment(enemy)).length} OUT:${this.enemies.filter((enemy) => !this.isInsideContainment(enemy)).length} FIRE:${this.debugProjectilesFired} COL:${this.debugProjectileCollisions} HIT:${this.debugHits} KILL:${this.debugKills} ENTRY:${this.debugEntries} DMG:${this.lastDamageSource}` : undefined,
       attacks,
       upgrades: this.getUpgradeOptions(),
     });

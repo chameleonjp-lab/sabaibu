@@ -1,6 +1,7 @@
 /**
  * Amberline Cataclysm: top-down containment-yard scene, using procedural meshes
- * plus managed generated textures so the arena remains crisp and playable.
+ * plus managed generated textures. The camera profile follows the live viewport
+ * aspect ratio so portrait, landscape, and desktop playfields retain a natural scale.
  */
 
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
@@ -33,21 +34,38 @@ export interface GameSceneOptions {
   forceModulePreview: boolean;
   bossPreview: boolean;
   strikerPreview: boolean;
+  idlePreview: boolean;
+  explosionPreview: boolean;
+  bossExplosionPreview: boolean;
+  bossExplosionFarPreview: boolean;
+  debugMode: boolean;
   rerollPreview: number;
   onSnapshot: (snapshot: GameSnapshot) => void;
 }
+
+type ViewportCameraProfile = { fov: number; beta: number; radiusScale: number; combatRadiusScale: number };
+
+const getViewportCameraProfile = (width: number, height: number): ViewportCameraProfile => {
+  const aspect = width / Math.max(1, height);
+  if (aspect < 0.68) return { fov: 0.7, beta: 1.24, radiusScale: 0.91, combatRadiusScale: 0.63 };
+  if (aspect < 0.94) return { fov: 0.78, beta: 1.17, radiusScale: 0.97, combatRadiusScale: 0.67 };
+  if (aspect < 1.28) return { fov: 0.82, beta: 1.13, radiusScale: 0.93, combatRadiusScale: 0.69 };
+  if (aspect < 1.75) return { fov: 0.92, beta: 1.02, radiusScale: 1, combatRadiusScale: 0.72 };
+  return { fov: 0.86, beta: 1, radiusScale: 1.07, combatRadiusScale: 0.74 };
+};
 
 export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement, options: GameSceneOptions): Promise<GameHandle> {
   const scene = new Scene(engine);
   scene.clearColor = new Color4(0.012, 0.017, 0.021, 1);
   scene.ambientColor = new Color3(0.12, 0.11, 0.08);
 
-  const camera = new ArcRotateCamera("tactical-overlook", -Math.PI / 2, 1.02, 31, new Vector3(0, 0, 0), scene);
+  const initialProfile = getViewportCameraProfile(canvas.clientWidth, canvas.clientHeight);
+  const camera = new ArcRotateCamera("tactical-overlook", -Math.PI / 2, initialProfile.beta, 31 * initialProfile.radiusScale, new Vector3(0, 0, 0), scene);
   camera.lowerBetaLimit = 0.92;
-  camera.upperBetaLimit = 1.07;
-  camera.lowerRadiusLimit = 29;
-  camera.upperRadiusLimit = 41;
-  camera.fov = 0.92;
+  camera.upperBetaLimit = 1.32;
+  camera.lowerRadiusLimit = 22;
+  camera.upperRadiusLimit = 44;
+  camera.fov = initialProfile.fov;
   camera.attachControl(canvas, false);
   camera.inputs.clear();
 
@@ -95,7 +113,57 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     block.material = blockMaterial;
   });
 
-  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.rerollPreview);
+  // The player boundary is ±31 in GameWorld; this engineered buffer makes the limit legible before contact.
+  const containmentBoundary = 32.3;
+  const containmentWallMaterial = new StandardMaterial("containment-wall", scene);
+  containmentWallMaterial.diffuseColor = new Color3(0.035, 0.075, 0.08);
+  containmentWallMaterial.emissiveColor = new Color3(0.008, 0.065, 0.07);
+  containmentWallMaterial.specularColor = Color3.Black();
+  containmentWallMaterial.alpha = 0.72;
+  containmentWallMaterial.backFaceCulling = false;
+  const containmentCapMaterial = new StandardMaterial("containment-wall-amber", scene);
+  containmentCapMaterial.diffuseColor = new Color3(0.88, 0.18, 0.01);
+  containmentCapMaterial.emissiveColor = new Color3(0.92, 0.23, 0.015);
+  containmentCapMaterial.specularColor = Color3.Black();
+  const containmentPostMaterial = new StandardMaterial("containment-post", scene);
+  containmentPostMaterial.diffuseColor = new Color3(0.09, 0.12, 0.12);
+  containmentPostMaterial.emissiveColor = new Color3(0.018, 0.04, 0.04);
+  containmentPostMaterial.specularColor = Color3.Black();
+  const wallLength = containmentBoundary * 2 + 0.8;
+  const wallHeight = 2.7;
+  const wallThickness = 0.55;
+  const walls = [
+    { name: "containment-wall-east", position: new Vector3(containmentBoundary, wallHeight / 2, 0), width: wallThickness, depth: wallLength },
+    { name: "containment-wall-west", position: new Vector3(-containmentBoundary, wallHeight / 2, 0), width: wallThickness, depth: wallLength },
+    { name: "containment-wall-north", position: new Vector3(0, wallHeight / 2, containmentBoundary), width: wallLength, depth: wallThickness },
+    { name: "containment-wall-south", position: new Vector3(0, wallHeight / 2, -containmentBoundary), width: wallLength, depth: wallThickness },
+  ];
+  walls.forEach((wallSpec) => {
+    const wall = MeshBuilder.CreateBox(wallSpec.name, { width: wallSpec.width, height: wallHeight, depth: wallSpec.depth }, scene);
+    wall.position.copyFrom(wallSpec.position);
+    wall.material = containmentWallMaterial;
+    const cap = MeshBuilder.CreateBox(`${wallSpec.name}-cap`, { width: wallSpec.width + 0.06, height: 0.11, depth: wallSpec.depth + 0.06 }, scene);
+    cap.position.copyFrom(wallSpec.position);
+    cap.position.y = wallHeight + 0.05;
+    cap.material = containmentCapMaterial;
+  });
+  const postPositions = [
+    [-containmentBoundary, -containmentBoundary], [-containmentBoundary, containmentBoundary], [containmentBoundary, -containmentBoundary], [containmentBoundary, containmentBoundary],
+    [-containmentBoundary, 0], [containmentBoundary, 0], [0, -containmentBoundary], [0, containmentBoundary],
+  ];
+  postPositions.forEach(([x, z], index) => {
+    const post = MeshBuilder.CreateBox(`containment-post-${index}`, { width: 0.92, height: 3.6, depth: 0.92 }, scene);
+    post.position.set(x, 1.8, z);
+    post.material = containmentPostMaterial;
+    const beacon = MeshBuilder.CreateSphere(`containment-beacon-${index}`, { diameter: 0.36, segments: 8 }, scene);
+    beacon.position.set(x, 3.72, z);
+    beacon.material = containmentCapMaterial;
+    const warningBand = MeshBuilder.CreateBox(`containment-band-${index}`, { width: 1.02, height: 0.18, depth: 1.02 }, scene);
+    warningBand.position.set(x, 2.7, z);
+    warningBand.material = containmentCapMaterial;
+  });
+
+  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.debugMode, options.rerollPreview);
   scene.onBeforeRenderObservable.add(() => {
     const delta = Math.min(0.05, scene.getEngine().getDeltaTime() / 1000);
     const forward = camera.target.subtract(camera.position);
@@ -105,11 +173,14 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     world.setCameraBasis(forward, right);
     world.update(delta);
     const framing = world.getFramingState();
-    const desiredRadius = Math.min(40, 30 + Math.min(10, framing.nearbyEnemyCount * 0.38));
+    const profile = getViewportCameraProfile(scene.getEngine().getRenderWidth(), scene.getEngine().getRenderHeight());
+    const desiredRadius = Math.min(40, 30 + Math.min(10, framing.nearbyEnemyCount * 0.38)) * profile.radiusScale;
     const cameraEase = Math.min(1, delta * 2.8);
     camera.radius += (desiredRadius - camera.radius) * cameraEase;
+    camera.fov += (profile.fov - camera.fov) * Math.min(1, delta * 4.4);
+    camera.beta += (profile.beta - camera.beta) * Math.min(1, delta * 4.4);
     camera.target.copyFrom(framing.playerPosition);
-    world.setCombatRadius(camera.radius * 0.72);
+    world.setCombatRadius(Math.max(15, camera.radius * profile.combatRadiusScale));
   });
 
   return {
