@@ -20,6 +20,15 @@ export interface AttackStatus {
   active: boolean;
 }
 
+export interface AttackResultStat {
+  id: AttackId;
+  label: string;
+  iconId: IconId;
+  tier: number;
+  damage: number;
+  kills: number;
+}
+
 export interface UpgradeOption {
   id: UpgradeId;
   code: string;
@@ -47,6 +56,8 @@ export interface GameSnapshot {
   enemyCount: number;
   debugStatus?: string;
   attacks: AttackStatus[];
+  totalDamage: number;
+  resultStats: AttackResultStat[];
   upgrades: UpgradeOption[];
 }
 

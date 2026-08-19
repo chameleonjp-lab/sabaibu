@@ -16,6 +16,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { Scene } from "@babylonjs/core/scene";
 import { GAME_ASSETS } from "./assets";
+import { ARENA_OBSTACLES } from "./arena";
 import { GameWorld } from "./GameWorld";
 import type { GameSnapshot, ModuleId, UpgradeId } from "./types";
 
@@ -44,6 +45,10 @@ export interface GameSceneOptions {
   levelPreview: number;
   balancePreviewLevel: number;
   variantPreviewLevel: number;
+  milestoneBossPreviewLevel: number;
+  milestoneRewardPreviewLevel: number;
+  obstaclePreview: boolean;
+  resultPreview: boolean;
   onSnapshot: (snapshot: GameSnapshot) => void;
 }
 
@@ -51,9 +56,11 @@ type ViewportCameraProfile = { fov: number; beta: number; radiusScale: number; c
 
 const getViewportCameraProfile = (width: number, height: number): ViewportCameraProfile => {
   const aspect = width / Math.max(1, height);
-  if (aspect < 0.68) return { fov: 0.7, beta: 1.24, radiusScale: 0.91, combatRadiusScale: 0.63 };
-  if (aspect < 0.94) return { fov: 0.78, beta: 1.17, radiusScale: 0.97, combatRadiusScale: 0.67 };
-  if (aspect < 1.28) return { fov: 0.82, beta: 1.13, radiusScale: 0.93, combatRadiusScale: 0.69 };
+  const compactViewport = Math.min(width, height) < 650;
+  if (aspect < 0.68) return { fov: 0.78, beta: 1.22, radiusScale: 1.08, combatRadiusScale: 0.71 };
+  if (aspect < 0.94) return { fov: 0.86, beta: 1.15, radiusScale: 1.12, combatRadiusScale: 0.74 };
+  if (aspect < 1.28) return { fov: 0.9, beta: 1.1, radiusScale: 1.08, combatRadiusScale: 0.75 };
+  if (compactViewport && aspect >= 1.75) return { fov: 0.96, beta: 0.98, radiusScale: 1.19, combatRadiusScale: 0.78 };
   if (aspect < 1.75) return { fov: 0.92, beta: 1.02, radiusScale: 1, combatRadiusScale: 0.72 };
   return { fov: 0.86, beta: 1, radiusScale: 1.07, combatRadiusScale: 0.74 };
 };
@@ -108,10 +115,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
   blockMaterial.diffuseColor = new Color3(0.075, 0.11, 0.12);
   blockMaterial.emissiveColor = new Color3(0.01, 0.07, 0.08);
   blockMaterial.specularColor = Color3.Black();
-  const blockPositions = [
-    [-17, -12, 2.4, 2.8], [18, 12, 2.8, 2.2], [-21, 16, 2.2, 3.4], [19, -17, 3.2, 2.1], [-8, 22, 3.1, 2.3], [9, -23, 2.4, 2.7],
-  ];
-  blockPositions.forEach(([x, z, width, depth], index) => {
+  ARENA_OBSTACLES.forEach(({ x, z, width, depth }, index) => {
     const block = MeshBuilder.CreateBox(`obstruction-${index}`, { width, height: 1.4, depth }, scene);
     block.position = new Vector3(x, 0.7, z);
     block.material = blockMaterial;
@@ -167,7 +171,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     warningBand.material = containmentCapMaterial;
   });
 
-  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview, options.levelPreview, options.balancePreviewLevel, options.variantPreviewLevel);
+  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview, options.levelPreview, options.balancePreviewLevel, options.variantPreviewLevel, options.milestoneBossPreviewLevel, options.milestoneRewardPreviewLevel, options.obstaclePreview, options.resultPreview);
   scene.onBeforeRenderObservable.add(() => {
     const delta = Math.min(0.05, scene.getEngine().getDeltaTime() / 1000);
     const forward = camera.target.subtract(camera.position);
