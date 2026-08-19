@@ -156,3 +156,130 @@ button { font: inherit; }
   .game-shell.viewport-landscape-compact .loadout-rail { right: max(14px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom)); }
   .game-shell.viewport-landscape-compact .loadout-rail > .weapon-card:nth-child(n+5) { display: none; }
 }
+
+/* Amberline touch input: the movement origin materializes exactly where the player begins a drag. */
+.floating-control-surface { position: absolute; inset: 0; z-index: 4; pointer-events: auto; touch-action: none; }
+.game-shell .touch-drive.touch-drive-floating { position: absolute; z-index: 5; display: grid; place-items: center; width: 128px; height: 128px; margin: -64px; pointer-events: none; touch-action: none; user-select: none; border: 1px solid rgba(255, 236, 198, .24); border-radius: 50%; background: radial-gradient(circle, rgba(255, 222, 158, .1) 0 30%, rgba(101, 87, 64, .035) 58%, rgba(4, 9, 10, .015) 72%); box-shadow: inset 0 0 24px rgba(255, 226, 173, .08); animation: floating-stick-in .14s cubic-bezier(.23, 1, .32, 1); }
+.touch-drive-floating .joystick-rings { position: absolute; inset: 17px; border: 1px solid rgba(255, 236, 198, .2); border-radius: 50%; }
+.touch-drive-floating .joystick-rings::before, .touch-drive-floating .joystick-rings::after { content: ""; position: absolute; background: rgba(255, 238, 205, .16); }
+.touch-drive-floating .joystick-rings::before { top: 9px; bottom: 9px; left: 50%; width: 1px; }
+.touch-drive-floating .joystick-rings::after { top: 50%; right: 9px; left: 9px; height: 1px; }
+.touch-drive-floating .joystick-knob { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 42px; height: 42px; margin: -21px; border: 1px solid rgba(255, 241, 211, .44); border-radius: 50%; background: rgba(87, 69, 48, .3); box-shadow: inset 0 0 10px rgba(255, 240, 204, .16); transition: transform .06s linear; }
+.touch-drive-floating .joystick-knob i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 247, 226, .72); box-shadow: 0 0 8px rgba(255, 231, 175, .22); }
+.touch-drive-floating small { position: absolute; inset: auto 0 10px; color: rgba(255, 238, 199, .46); text-align: center; font: 700 7px/1.15 "IBM Plex Mono", monospace; letter-spacing: .14em; }
+@keyframes floating-stick-in { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+@media (max-width: 700px) { .game-shell .touch-drive.touch-drive-floating { width: 112px; height: 112px; margin: -56px; } }
+
+/* Amberline responsive HUD: density follows the usable mobile aspect ratio, not a single handset width. */
+@media (max-width: 960px) {
+  .game-shell.viewport-portrait-narrow .mission-bar, .game-shell.viewport-portrait .mission-bar { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: max(10px, env(safe-area-inset-top)) max(13px, env(safe-area-inset-right)) 8px max(13px, env(safe-area-inset-left)); }
+  .game-shell.viewport-portrait-narrow .brand-lockup, .game-shell.viewport-portrait .brand-lockup { gap: 7px; }
+  .game-shell.viewport-portrait-narrow .brand-sigil, .game-shell.viewport-portrait .brand-sigil { width: 26px; height: 26px; }
+  .game-shell.viewport-portrait-narrow .brand-lockup .eyebrow, .game-shell.viewport-portrait .brand-lockup .eyebrow, .game-shell.viewport-portrait-narrow .timer-panel, .game-shell.viewport-portrait .timer-panel { display: none; }
+  .game-shell.viewport-portrait-narrow .brand-lockup h1, .game-shell.viewport-portrait .brand-lockup h1 { margin: 0; font-size: clamp(14px, 4.5vw, 18px); letter-spacing: .045em; }
+  .game-shell.viewport-portrait-narrow .kills-panel, .game-shell.viewport-portrait .kills-panel { gap: 1px; padding-right: 7px; }
+  .game-shell.viewport-portrait-narrow .kills-panel span, .game-shell.viewport-portrait .kills-panel span, .game-shell.viewport-portrait-narrow .kills-panel small, .game-shell.viewport-portrait .kills-panel small { font-size: 6px; letter-spacing: .11em; }
+  .game-shell.viewport-portrait-narrow .kills-panel strong, .game-shell.viewport-portrait .kills-panel strong { font-size: 19px; }
+  .game-shell.viewport-portrait-narrow .health-unit, .game-shell.viewport-portrait .health-unit { top: calc(max(10px, env(safe-area-inset-top)) + 62px); left: max(13px, env(safe-area-inset-left)); width: min(145px, 42vw); padding-left: 8px; }
+  .game-shell.viewport-portrait-narrow .health-unit p, .game-shell.viewport-portrait .health-unit p { display: none; }
+  .game-shell.viewport-portrait-narrow .unit-header, .game-shell.viewport-portrait .unit-header { font-size: 8px; }
+  .game-shell.viewport-portrait-narrow .xp-unit, .game-shell.viewport-portrait .xp-unit { bottom: calc(103px + env(safe-area-inset-bottom)); width: calc(100% - max(28px, env(safe-area-inset-left) + env(safe-area-inset-right))); }
+  .game-shell.viewport-portrait-narrow .xp-readout, .game-shell.viewport-portrait .xp-readout { margin-bottom: 4px; font-size: 7px; }
+  .game-shell.viewport-portrait-narrow .meter, .game-shell.viewport-portrait .meter { height: 5px; }
+  .game-shell.viewport-portrait-narrow .loadout-rail, .game-shell.viewport-portrait .loadout-rail { left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: max(8px, env(safe-area-inset-bottom)); gap: 4px; }
+  .game-shell.viewport-portrait-narrow .loadout-mark, .game-shell.viewport-portrait .loadout-mark { flex: 0 0 35px; width: 35px; padding: 3px; font-size: 7px; }
+  .game-shell.viewport-portrait-narrow .loadout-mark strong, .game-shell.viewport-portrait .loadout-mark strong { font-size: 16px; }
+  .game-shell.viewport-portrait-narrow .weapon-card, .game-shell.viewport-portrait .weapon-card { flex: 1 1 0; min-width: 0; width: auto; gap: 5px; padding: 5px 6px; }
+  .game-shell.viewport-portrait-narrow .weapon-card b, .game-shell.viewport-portrait .weapon-card b { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+  .game-shell.viewport-portrait-narrow .weapon-card small, .game-shell.viewport-portrait .weapon-card small { display: none; }
+  .game-shell.viewport-portrait-narrow .weapon-glyph, .game-shell.viewport-portrait .weapon-glyph { flex: 0 0 17px; width: 17px; height: 17px; }
+  .game-shell.viewport-portrait-narrow .instruction, .game-shell.viewport-portrait .instruction { display: none; }
+  .game-shell.viewport-portrait-narrow .loadout-rail > .weapon-card:nth-child(n+4) { display: none; }
+  .game-shell.viewport-portrait .loadout-rail > .weapon-card:nth-child(n+5) { display: none; }
+  .game-shell.viewport-portrait-narrow .mobile-fire-status, .game-shell.viewport-portrait .mobile-fire-status { right: max(12px, env(safe-area-inset-right)); bottom: calc(128px + env(safe-area-inset-bottom)); padding: 6px 7px; }
+  .game-shell.viewport-portrait-narrow .mobile-fire-status span, .game-shell.viewport-portrait-narrow .mobile-fire-status b, .game-shell.viewport-portrait .mobile-fire-status span, .game-shell.viewport-portrait .mobile-fire-status b { font-size: 6px; }
+  .game-shell.viewport-portrait-narrow .mobile-fire-status i, .game-shell.viewport-portrait .mobile-fire-status i { font-size: 11px; }
+
+  .game-shell.viewport-landscape-compact .mission-bar { grid-template-columns: minmax(144px, 1fr) 72px minmax(92px, .75fr); gap: 6px; padding: max(7px, env(safe-area-inset-top)) max(13px, env(safe-area-inset-right)) 4px max(13px, env(safe-area-inset-left)); }
+  .game-shell.viewport-landscape-compact .brand-lockup { gap: 6px; }
+  .game-shell.viewport-landscape-compact .brand-sigil { width: 25px; height: 25px; }
+  .game-shell.viewport-landscape-compact .brand-lockup .eyebrow { display: none; }
+  .game-shell.viewport-landscape-compact .brand-lockup h1 { margin: 0; font-size: clamp(13px, 2.2vw, 17px); letter-spacing: .04em; }
+  .game-shell.viewport-landscape-compact .timer-panel { width: 72px; padding: 1px 4px 4px; }
+  .game-shell.viewport-landscape-compact .timer-panel strong { font-size: 18px; }
+  .game-shell.viewport-landscape-compact .timer-panel .timer-label, .game-shell.viewport-landscape-compact .kills-panel span, .game-shell.viewport-landscape-compact .kills-panel small { font-size: 6px; letter-spacing: .1em; }
+  .game-shell.viewport-landscape-compact .kills-panel { padding-right: 6px; }
+  .game-shell.viewport-landscape-compact .kills-panel strong { font-size: 18px; }
+  .game-shell.viewport-landscape-compact .health-unit { top: 65px; left: max(13px, env(safe-area-inset-left)); width: 112px; padding-left: 7px; }
+  .game-shell.viewport-landscape-compact .health-unit p { display: none; }
+  .game-shell.viewport-landscape-compact .unit-header { font-size: 7px; }
+  .game-shell.viewport-landscape-compact .xp-unit { bottom: 70px; width: min(310px, 40vw); }
+  .game-shell.viewport-landscape-compact .xp-readout { margin-bottom: 3px; font-size: 6px; }
+  .game-shell.viewport-landscape-compact .loadout-rail { left: auto; right: max(10px, env(safe-area-inset-right)); bottom: max(7px, env(safe-area-inset-bottom)); gap: 3px; }
+  .game-shell.viewport-landscape-compact .loadout-mark { width: 34px; padding: 3px; font-size: 7px; }
+  .game-shell.viewport-landscape-compact .loadout-mark strong { font-size: 15px; }
+  .game-shell.viewport-landscape-compact .weapon-card { width: clamp(92px, 14vw, 118px); padding: 4px 5px; gap: 4px; }
+  .game-shell.viewport-landscape-compact .weapon-card b { font-size: 9px; }
+  .game-shell.viewport-landscape-compact .weapon-card small { display: none; }
+  .game-shell.viewport-landscape-compact .weapon-glyph { width: 15px; height: 15px; }
+  .game-shell.viewport-landscape-compact .loadout-rail > .weapon-card:nth-child(n+5) { display: none; }
+  .game-shell.viewport-landscape-compact .mobile-fire-status { right: max(12px, env(safe-area-inset-right)); bottom: max(88px, calc(82px + env(safe-area-inset-bottom))); padding: 5px 6px; }
+}
+
+@media (max-width: 370px) and (orientation: portrait) {
+  .game-shell.viewport-portrait-narrow .brand-lockup h1 { font-size: 13px; }
+  .game-shell.viewport-portrait-narrow .health-unit { top: calc(max(8px, env(safe-area-inset-top)) + 57px); width: 132px; }
+  .game-shell.viewport-portrait-narrow .xp-unit { bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .game-shell.viewport-portrait-narrow .mobile-fire-status { bottom: calc(119px + env(safe-area-inset-bottom)); }
+}
+
+/* Amberline loadout rail: one native horizontal gesture reveals every equipped system. */
+.loadout-rail { z-index: 6; pointer-events: auto; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-behavior: smooth; scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: rgba(255, 190, 91, .58) rgba(7, 12, 12, .36); touch-action: pan-x; -webkit-overflow-scrolling: touch; }
+.loadout-rail::-webkit-scrollbar { height: 3px; }
+.loadout-rail::-webkit-scrollbar-track { background: rgba(7, 12, 12, .28); }
+.loadout-rail::-webkit-scrollbar-thumb { border-radius: 99px; background: rgba(255, 190, 91, .56); }
+.loadout-rail > .loadout-mark, .loadout-rail > .weapon-card { scroll-snap-align: start; }
+
+@media (max-width: 960px) {
+  .game-shell.viewport-portrait-narrow .loadout-rail, .game-shell.viewport-portrait .loadout-rail, .game-shell.viewport-landscape-compact .loadout-rail { display: flex; align-items: stretch; padding: 0 2px 4px; mask-image: linear-gradient(90deg, transparent 0, #000 8px, #000 calc(100% - 12px), transparent 100%); }
+  .game-shell.viewport-portrait-narrow .loadout-rail > .weapon-card, .game-shell.viewport-portrait .loadout-rail > .weapon-card, .game-shell.viewport-landscape-compact .loadout-rail > .weapon-card { display: flex !important; flex: 0 0 auto; }
+  .game-shell.viewport-portrait-narrow .loadout-rail > .weapon-card { width: min(150px, 43vw); }
+  .game-shell.viewport-portrait .loadout-rail > .weapon-card { width: min(166px, 41vw); }
+  .game-shell.viewport-landscape-compact .loadout-rail { left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); width: auto; }
+  .game-shell.viewport-landscape-compact .loadout-rail > .weapon-card { width: clamp(106px, 17vw, 138px); }
+  .game-shell.viewport-landscape-compact .loadout-rail > .weapon-card:nth-child(n+5) { display: flex !important; }
+}
+
+/* Amberline after-action telemetry: compact industrial report with scan-line hierarchy. */
+.result-console { width: min(920px, calc(100vw - 32px)); max-width: 920px; }
+.result-console > h2 { margin-bottom: 14px; }
+.result-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 0 0 14px; border: 1px solid rgba(255, 174, 54, .32); background: rgba(255, 174, 54, .25); }
+.result-summary > span { display: grid; gap: 5px; min-height: 66px; padding: 11px 12px; background: rgba(5, 10, 10, .94); }
+.result-summary small, .result-breakdown header, .result-stat-row small { color: rgba(255, 218, 153, .68); font: 700 8px/1.2 "IBM Plex Mono", monospace; letter-spacing: .12em; }
+.result-summary b { color: #fff1d0; font: 700 21px/1 "Chakra Petch", sans-serif; letter-spacing: .02em; }
+.result-breakdown { margin: 0 0 14px; border: 1px solid rgba(96, 228, 232, .28); background: linear-gradient(180deg, rgba(9, 26, 28, .84), rgba(5, 10, 10, .92)); }
+.result-breakdown header { display: flex; justify-content: space-between; align-items: center; padding: 10px 13px; border-bottom: 1px solid rgba(96, 228, 232, .2); color: #75f0f0; }
+.result-stat-list { max-height: min(34vh, 280px); overflow: auto; scrollbar-color: rgba(255, 174, 54, .6) rgba(0, 0, 0, .24); }
+.result-stat-row { display: grid; grid-template-columns: 30px 36px minmax(130px, 1fr) minmax(82px, .5fr) minmax(58px, .36fr); gap: 10px; align-items: center; min-height: 50px; padding: 7px 13px; border-bottom: 1px solid rgba(118, 228, 228, .1); }
+.result-stat-row:last-child { border-bottom: 0; }
+.result-rank { color: rgba(255, 188, 79, .7); font: 700 10px/1 "IBM Plex Mono", monospace; }
+.result-stat-icon { width: 30px; height: 30px; }
+.result-stat-row strong { display: grid; gap: 3px; color: #e8f3eb; font: 700 14px/1.1 "Chakra Petch", sans-serif; letter-spacing: .04em; }
+.result-stat-row strong small { color: rgba(121, 237, 239, .72); }
+.result-stat-row > b, .result-stat-row > i { display: grid; gap: 2px; justify-items: end; color: #fff1d0; font: 700 17px/1 "Chakra Petch", sans-serif; font-style: normal; }
+.result-stat-row > i { color: #aefb71; }
+.result-stat-row > b small, .result-stat-row > i small { color: rgba(255, 218, 153, .55); font-size: 7px; }
+.result-console > p { margin: 0 0 14px; color: rgba(230, 241, 231, .72); }
+@media (max-width: 700px) {
+  .result-console { width: min(96vw, 620px); padding: 18px 15px; }
+  .result-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .result-summary > span { min-height: 56px; padding: 9px 10px; }
+  .result-summary b { font-size: 18px; }
+  .result-stat-list { max-height: min(37vh, 310px); }
+  .result-stat-row { grid-template-columns: 20px 30px minmax(88px, 1fr) minmax(63px, .5fr) minmax(48px, .38fr); gap: 6px; min-height: 46px; padding: 6px 9px; }
+  .result-rank { font-size: 8px; }
+  .result-stat-icon { width: 25px; height: 25px; }
+  .result-stat-row strong { font-size: 11px; }
+  .result-stat-row > b, .result-stat-row > i { font-size: 14px; }
+  .result-breakdown header { padding: 8px 9px; font-size: 7px; }
+}
