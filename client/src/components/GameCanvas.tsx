@@ -10,7 +10,7 @@ import { GAME_ASSETS } from "@/game/assets";
 import { MODULE_UPGRADES, type GameSnapshot, type IconId, type ModuleId, type UpgradeId } from "@/game/types";
 
 const INITIAL_SNAPSHOT: GameSnapshot = {
-  phase: "playing", health: 100, maxHealth: 100, damageFlash: 0, xp: 0, xpNeeded: 9, level: 1, kills: 0, seconds: 0, weaponTier: 1, weaponCount: 0, weaponLimit: 5, rerollsRemaining: 3, enemyCount: 0, attacks: [], upgrades: [],
+  phase: "playing", health: 100, maxHealth: 100, damageFlash: 0, xp: 0, xpNeeded: 9, level: 1, kills: 0, seconds: 0, weaponTier: 1, weaponCount: 0, weaponLimit: 5, moduleMilestone: false, rerollsRemaining: 3, enemyCount: 0, attacks: [], upgrades: [],
 };
 
 const formatTime = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
@@ -41,6 +41,7 @@ export default function GameCanvas() {
   const rerollPreview = Number(searchParams.get("reroll") ?? (searchParams.has("reroll") ? "1" : "0"));
   const levelPreview = Math.max(0, Math.min(200, Math.floor(Number(searchParams.get("level") ?? "0"))));
   const balancePreviewLevel = Math.max(0, Math.min(200, Math.floor(Number(searchParams.get("balance") ?? "0"))));
+  const variantPreviewLevel = Math.max(0, Math.min(200, Math.floor(Number(searchParams.get("variants") ?? "0"))));
   const forceUpgrade = searchParams.has("upgrade") || rerollPreview > 0 || levelPreview > 0;
   const forceModulePreview = new URLSearchParams(window.location.search).has("modules");
   const bossPreview = new URLSearchParams(window.location.search).has("boss");
@@ -51,7 +52,7 @@ export default function GameCanvas() {
   const bossExplosionFarPreview = searchParams.has("bossExplosionFar");
   const auditValue = searchParams.get("audit");
   const auditModule = MODULE_UPGRADES.some((option) => option.id === auditValue) ? auditValue as ModuleId : undefined;
-  const debugMode = searchParams.has("debug") || Boolean(auditModule) || balancePreviewLevel > 0;
+  const debugMode = searchParams.has("debug") || Boolean(auditModule) || balancePreviewLevel > 0 || variantPreviewLevel > 0;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -59,7 +60,7 @@ export default function GameCanvas() {
     startedRef.current = true;
     const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, adaptToDeviceRatio: true });
     let cancelled = false;
-    createGameScene(engine, canvas, { demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, auditModule, debugMode, rerollPreview, levelPreview, balancePreviewLevel, onSnapshot: setSnapshot }).then((handle) => {
+    createGameScene(engine, canvas, { demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, auditModule, debugMode, rerollPreview, levelPreview, balancePreviewLevel, variantPreviewLevel, onSnapshot: setSnapshot }).then((handle) => {
       if (cancelled) {
         handle.dispose();
         return;
@@ -89,7 +90,7 @@ export default function GameCanvas() {
       engine.dispose();
       startedRef.current = false;
     };
-  }, [demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, auditModule, debugMode, rerollPreview, levelPreview, balancePreviewLevel]);
+  }, [demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, auditModule, debugMode, rerollPreview, levelPreview, balancePreviewLevel, variantPreviewLevel]);
 
   const setDirection = (x: number, z: number) => handleRef.current?.setTouchDirection(x, z);
   const updateJoystick = (clientX: number, clientY: number) => {

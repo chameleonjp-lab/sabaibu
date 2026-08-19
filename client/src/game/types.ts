@@ -42,6 +42,7 @@ export interface GameSnapshot {
   weaponTier: number;
   weaponCount: number;
   weaponLimit: number;
+  moduleMilestone: boolean;
   rerollsRemaining: number;
   enemyCount: number;
   debugStatus?: string;

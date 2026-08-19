@@ -43,6 +43,7 @@ export interface GameSceneOptions {
   rerollPreview: number;
   levelPreview: number;
   balancePreviewLevel: number;
+  variantPreviewLevel: number;
   onSnapshot: (snapshot: GameSnapshot) => void;
 }
 
@@ -166,7 +167,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     warningBand.material = containmentCapMaterial;
   });
 
-  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview, options.levelPreview, options.balancePreviewLevel);
+  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview, options.levelPreview, options.balancePreviewLevel, options.variantPreviewLevel);
   scene.onBeforeRenderObservable.add(() => {
     const delta = Math.min(0.05, scene.getEngine().getDeltaTime() / 1000);
     const forward = camera.target.subtract(camera.position);
