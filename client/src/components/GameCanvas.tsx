@@ -160,6 +160,14 @@ const EVOLUTION_LABELS: Record<string, string> = {
   "mine-decoy": "誘爆ビーコン",
 };
 
+const RANKING_PREVIEW_ROWS: RankingRow[] = [
+  { rank: 1, displayName: "ALPHA", bestScore: 48200, playCount: 12 },
+  { rank: 2, displayName: "NEON", bestScore: 40150, playCount: 8 },
+  { rank: 3, displayName: "TEST", bestScore: 28450, playCount: 1 },
+  { rank: 4, displayName: "VOID", bestScore: 19700, playCount: 5 },
+  { rank: 5, displayName: "LUMA", bestScore: 12600, playCount: 3 },
+];
+
 export default function GameCanvas() {
   const mainRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -187,7 +195,8 @@ export default function GameCanvas() {
   const milestoneBossPreviewLevel = Math.max(0, Math.min(200, Math.floor(Number(searchParams.get("milestoneBoss") ?? "0"))));
   const milestoneRewardPreviewLevel = Math.max(0, Math.min(200, Math.floor(Number(searchParams.get("milestoneReward") ?? "0"))));
   const obstaclePreview = searchParams.has("obstacle");
-  const resultPreview = searchParams.has("result");
+  const rankingPreview = searchParams.has("ranking");
+  const resultPreview = searchParams.has("result") || rankingPreview;
   const touchPreview = searchParams.has("touch");
   const settingsPreview = searchParams.has("settings");
   const demoMode = searchParams.has("demo");
@@ -237,6 +246,14 @@ export default function GameCanvas() {
   const [rankingMessage, setRankingMessage] = useState("");
   const [rankingRows, setRankingRows] = useState<RankingRow[]>([]);
   const [rankingLoadError, setRankingLoadError] = useState("");
+
+  useEffect(() => {
+    if (!resultPreview) return;
+    setRankingStatus("submitted");
+    setRankingMessage("確認用の表示です。実際のランキング送信は行いません。");
+    setRankingRows(RANKING_PREVIEW_ROWS);
+    setRankingLoadError("");
+  }, [resultPreview]);
 
   useEffect(() => {
     phaseRef.current = snapshot.phase;
@@ -794,7 +811,7 @@ export default function GameCanvas() {
   const currentMode = snapshotView.mode ?? activeMode;
   const resultOutcome = outcomeLabel(snapshotView.outcome);
   const isGameover = runStarted && snapshot.phase === "gameover";
-  const rankingVisible = isGameover && !previewAutostart;
+  const rankingVisible = isGameover && (!previewAutostart || resultPreview);
   const rankingCurrentName = normalizeRankingName(playerName);
   const isBossReward = runStarted && snapshot.phase === "bossReward";
   const isUpgrade = runStarted && (snapshot.phase === "upgrade" || snapshot.phase === "bossReward");
