@@ -127,7 +127,7 @@ NormalとEndlessのベストスコアはブラウザへ別々に保存します�
 
 ## 音、設定、モバイル表示
 
-効果音は音声ファイルを同梱せず、Web Audio APIのOscillatorとGainで開始、射撃、撃破、XP、レベルアップ、警告、ボス、被弾、低HP、選択、Clear、Game Overの短い合成音を生成します。ブラウザの自動再生制限に従い、ユーザー操作後にAudioContextを開始します。効果音のオン／オフは端末へ保存します。
+効果音はWeb Audio APIのOscillatorとGainで短い合成音を生成し、ボス出現と選択操作にはCC0素材を同じAudioContextの時計へ重ねます。素材は`client/public/audio`へ同梱し、外部サイトへ接続しません。素材の出典、ハッシュ、読み込み中の合成音フォールバック、同期方法は[AUDIO_CREDITS.md](AUDIO_CREDITS.md)に記録しています。ブラウザの自動再生制限に従い、ユーザー操作後にAudioContextを開始します。効果音のオン／オフは端末へ保存します。
 
 設定ではフローティングスティック透明度20〜100%、カメラ倍率82〜122%、効果音を変更できます。出撃中にSettingsを開くと`paused`になり、閉じると元のPause経路に応じて再開します。
 
