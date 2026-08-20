@@ -105,7 +105,7 @@ Normalでは3:00に侵入母艦、6:00に突撃指揮機、9:15に重装破城�
 
 Dodgeは4.2秒クールダウン、3.4の移動、0.28秒の無敵を持ちます。予告終了直前0.34秒の回避、または無敵中の被弾判定でPerfect Dodgeとなり、+200点と短時間の攻撃強化を得ます。旧停止針は通常プレイでは発生せず、`?idle`デバッグだけで確認できます。
 
-HUDは縦長、標準縦、横長、コンパクト横の表示領域で密度を切り替えます。`viewport-fit=cover`と`env(safe-area-inset-*)`を使い、ノッチやホームインジケーターを避けます。PAUSEまたはSETTINGSを開いている間は`paused`となり、戦闘と時計を停止します。設定ではスティック透明度、カメラ倍率、Web Audio APIで合成する効果音のオン／オフを保存できます。
+HUDは縦長、標準縦、横長、コンパクト横の表示領域で密度を切り替えます。`viewport-fit=cover`と`env(safe-area-inset-*)`を使い、ノッチやホームインジケーターを避けます。PAUSEまたはSETTINGSを開いている間は`paused`となり、戦闘と時計を停止します。設定ではスティック透明度、カメラ倍率、合成音と同じ時計へ重ねるCC0効果音のオン／オフを保存できます。音素材の出典は[音素材の出典](docs/AUDIO_CREDITS.md)に記録しています。
 
 ## 開発
 
@@ -117,7 +117,7 @@ HUDは縦長、標準縦、横長、コンパクト横の表示領域で密度�
 | `client/src/game/rules.ts` | モード時間、ボス時刻、装備枠、Dodge、スコア、コンボ、進化レシピの共有定数と純粋関数。 |
 | `client/src/game/types.ts` | HUDスナップショット、アップグレードカタログ、攻撃・統計の共有契約。 |
 | `client/src/game/arena.ts` | 障害物の共有座標とプレイヤー衝突半径。 |
-| `client/src/hooks/useGameAudio.ts` | ユーザー操作後に開始するWeb Audio APIの合成効果音と保存設定。 |
+| `client/src/hooks/useGameAudio.ts` | ユーザー操作後に開始する合成音、同梱CC0素材、保存設定。 |
 | `client/src/index.css` | Amberline HUD、画面比率別のレスポンシブ配置、タッチ操作、武器レール。 |
 
 開発上の設計・変更手順は [アーキテクチャ資料](docs/ARCHITECTURE.md) と [開発・検証ガイド](docs/DEVELOPMENT_AND_VERIFICATION.md) にまとめています。

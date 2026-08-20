@@ -9,6 +9,7 @@ Neon Siege: Survivorの仕様、構造、運用手順を用途別に分割した
 | React、Babylon.js、ゲーム状態、ライフサイクル | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 実装変更、デバッグ、テスト、モバイル確認、PR運用 | [DEVELOPMENT_AND_VERIFICATION.md](DEVELOPMENT_AND_VERIFICATION.md) |
 | 高レベル帯の数値曲線 | [../high_level_balance_report.md](../high_level_balance_report.md) |
+| 音素材の出典と同期方法 | [AUDIO_CREDITS.md](AUDIO_CREDITS.md) |
 | 敵変種の設計と詳細パラメータ | [../high_level_variant_report.md](../high_level_variant_report.md)、[../high_level_variant_parameters.md](../high_level_variant_parameters.md) |
 | モジュール火力の比較と再調整履歴 | [../module_dps_report.md](../module_dps_report.md) |
 | 過去の命中・侵入状態の不具合調査 | [../combat_debug_report.md](../combat_debug_report.md) |
