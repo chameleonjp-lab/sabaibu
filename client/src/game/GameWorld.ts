@@ -12,7 +12,26 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import type { Scene } from "@babylonjs/core/scene";
 import { GAME_ASSETS } from "./assets";
 import { ARENA_OBSTACLES, PLAYER_OBSTACLE_COLLISION_RADIUS } from "./arena";
-import { MODULE_UPGRADES, STANDARD_UPGRADES, UPGRADE_CATALOG, type AttackId, type AttackStatus, type GamePhase, type GameSnapshot, type ModuleId, type UpgradeId, type UpgradeOption } from "./types";
+import { MODULE_UPGRADES, STANDARD_UPGRADES, UPGRADE_CATALOG, type AttackId, type AttackStatus, type BossRewardId, type EvolutionId, type GameMode, type GameOutcome, type GamePhase, type GameSnapshot, type ModuleId, type UpgradeId, type UpgradeOption } from "./types";
+import {
+  ATTACK_SLOT_LIMIT,
+  COMBO_WINDOW_SECONDS,
+  DODGE_COOLDOWN_SECONDS,
+  DODGE_DISTANCE,
+  DODGE_INVULNERABILITY_SECONDS,
+  DODGE_PERFECT_WINDOW_SECONDS,
+  EVOLUTION_RECIPES,
+  NORMAL_BOSS_TIMINGS,
+  NORMAL_MAX_ENEMIES,
+  NORMAL_MAX_ENEMIES_PER_SECOND,
+  NORMAL_TARGET_SECONDS,
+  UTILITY_SLOT_LIMIT,
+  getComboMultiplier,
+  getSecondsUntilNextNormalBoss,
+  isNormalTargetReached,
+  scoreForClear,
+  scoreForEnemy,
+} from "./rules";
 
 type EnemyKind = "scout" | "striker" | "bulwark";
 const HIGH_VARIANT_IDS = ["rift-runner", "ion-bastion", "flare-wisp", "pulse-maw", "vector-lancer", "shardling", "gravity-husk", "vanta-stalker", "hex-warden", "ember-ram", "echo-swarm", "flux-guardian", "plasma-sower", "phase-razor", "abyss-harrier", "nova-sentinel", "lattice-marauder", "cinder-golem", "prism-revenant", "void-archon", "singularity-beast"] as const;
@@ -45,7 +64,8 @@ const HIGH_VARIANTS: Record<HighVariantId, HighVariantConfig> = {
 type BossAction = "none" | "shockwave" | "charge" | "artillery" | "barrage";
 type StrikerAction = "none" | "windup" | "dash";
 type PlayerDamageSource = "idle-needle" | "contact" | "variant-pulse" | "striker-dash" | "bulwark-barrage" | "bulwark-shockwave" | "bulwark-artillery" | "bulwark-charge" | "bulwark-destruction";
-type Enemy = { mesh: AbstractMesh; kind: EnemyKind; hp: number; maxHp: number; speed: number; scale: number; contactDamage: number; xpValue: number; lastDamagedBy?: AttackId; highVariant?: HighVariantId; milestoneBoss?: boolean; milestoneCrown?: AbstractMesh; variantTimer: number; variantBurst: number; variantAura?: AbstractMesh; healthFill?: AbstractMesh; hitFlash: number; orbitCooldown: number; cryoTime: number; corrosionTime: number; corrosionStacks: number; corrosionTick: number; corrosionMark?: AbstractMesh; enteringContainment: boolean; strikerAction: StrikerAction; strikerTimer: number; strikerCooldown: number; strikerVector: Vector3; strikerDashHit: boolean; strikerMarker?: AbstractMesh; bossAction: BossAction; bossTimer: number; bossCooldown: number; bossTarget: Vector3; bossVector: Vector3; bossChargeHit: boolean; bossBursts: number; bossEnraged: boolean; bossMarker?: AbstractMesh };
+type PlayerDamageResult = "damaged" | "perfect" | "blocked";
+type Enemy = { mesh: AbstractMesh; kind: EnemyKind; hp: number; maxHp: number; speed: number; scale: number; contactDamage: number; xpValue: number; lastDamagedBy?: AttackId; highVariant?: HighVariantId; milestoneBoss?: boolean; missionBossStage?: 1 | 2 | 3; milestoneCrown?: AbstractMesh; variantTimer: number; variantBurst: number; variantAura?: AbstractMesh; healthFill?: AbstractMesh; hitFlash: number; orbitCooldown: number; cryoTime: number; corrosionTime: number; corrosionStacks: number; corrosionTick: number; corrosionMark?: AbstractMesh; enteringContainment: boolean; strikerAction: StrikerAction; strikerTimer: number; strikerCooldown: number; strikerVector: Vector3; strikerDashHit: boolean; strikerMarker?: AbstractMesh; bossAction: BossAction; bossTimer: number; bossCooldown: number; bossTarget: Vector3; bossVector: Vector3; bossChargeHit: boolean; bossBursts: number; bossEnraged: boolean; bossMarker?: AbstractMesh; vulnerableTime: number; summonTimer: number; lastTargetedAt: number };
 type Projectile = { mesh: AbstractMesh; velocity: Vector3; damage: number; life: number; hitRadius: number; source: AttackId };
 type CombatStat = { damage: number; kills: number };
 type Gem = { mesh: AbstractMesh; value: number };
@@ -89,6 +109,29 @@ const MILESTONE_BOSS_SCALE_MULTIPLIER = 2;
 const PLAYER_MAX_HEALTH_CAP = 200;
 const MODULE_MILESTONE_START_LEVEL = 30;
 const MODULE_MILESTONE_INTERVAL = 7;
+const MAX_GEM_MESHES = 100;
+const PERFECT_DODGE_SCORE = 200;
+const PERFECT_DODGE_BOOST_SECONDS = 2.5;
+const NORMAL_BOSS_LABELS = ["", "侵入母艦", "突撃指揮機", "重装破城機"] as const;
+const EVOLUTION_REPRESENTATIVES: Record<EvolutionId, ModuleId> = {
+  "vector-laser": "vector",
+  "ricochet-chain": "ricochet",
+  "gravity-mortar": "gravity",
+  "mirage-pylon": "pylon",
+  "nova-saw": "saw",
+  "mine-decoy": "decoy",
+};
+const DEATH_CAUSE_LABELS: Record<PlayerDamageSource, string> = {
+  "idle-needle": "停止地点への落下攻撃",
+  contact: "敵との接触",
+  "variant-pulse": "高レベル敵の波動",
+  "striker-dash": "突撃機の突進",
+  "bulwark-barrage": "重装機の連続砲撃",
+  "bulwark-shockwave": "重装機の衝撃波",
+  "bulwark-artillery": "重装機の範囲砲撃",
+  "bulwark-charge": "重装機の突進",
+  "bulwark-destruction": "重装機の撃破爆発",
+};
 
 export class GameWorld {
   private readonly player: AbstractMesh;
@@ -137,10 +180,13 @@ export class GameWorld {
   private touchDirection = Vector3.Zero();
   private cameraForward = new Vector3(0, 0, 1);
   private cameraRight = new Vector3(1, 0, 0);
+  private lastMoveDirection = new Vector3(0, 0, 1);
   private phase: GamePhase = "playing";
+  private outcome: GameOutcome = "running";
   private health = 100;
   private maxHealth = 100;
   private damageFlash = 0;
+  private dangerSignal = 0;
   private xp = 0;
   private xpNeeded = 9;
   private level = 1;
@@ -149,6 +195,11 @@ export class GameWorld {
   private weaponTier = 1;
   private scatterTier = 0;
   private orbitTier = 0;
+  private relayTier = 0;
+  private barrierTier = 0;
+  private railMastery = 0;
+  private relayMastery = 0;
+  private barrierMastery = 0;
   private readonly moduleTiers: Record<ModuleId, number> = { vector: 0, nova: 0, mirage: 0, pylon: 0, reactive: 0, cryo: 0, ricochet: 0, gravity: 0, decoy: 0, mortar: 0, split: 0, boomerang: 0, laser: 0, chain: 0, mine: 0, fan: 0, skyfall: 0, cleaver: 0, needle: 0, saw: 0, harpoon: 0, thermal: 0, sonic: 0, cluster: 0, corrosion: 0 };
   private upgradeOptions: UpgradeOption[] = [];
   private rerollsRemaining = MAX_REROLLS_PER_RUN;
@@ -188,6 +239,9 @@ export class GameWorld {
   private clusterTimer = 0;
   private sawAngle = 0;
   private spawnTimer = 0;
+  private encounterTimer = 28;
+  private encounterQueue: EnemyKind[] = [];
+  private activeEncounterLabel = "通常侵入";
   private damageTimer = 0;
   private lastDamageSource: PlayerDamageSource | "none" = "none";
   private idleSeconds = 0;
@@ -198,6 +252,23 @@ export class GameWorld {
   private debugProjectilesFired = 0;
   private debugProjectileCollisions = 0;
   private combatStats: Record<AttackId, CombatStat> = this.createCombatStats();
+  private score = 0;
+  private combo = 0;
+  private comboTimer = 0;
+  private maxCombo = 0;
+  private bossesDefeated = 0;
+  private perfectDodges = 0;
+  private dodgeCooldown = 0;
+  private dodgeInvulnerable = 0;
+  private dodgeBoostSeconds = 0;
+  private dodgePerfectRegistered = false;
+  private attackAmplifier = 1;
+  private deathCause: string | null = null;
+  private readonly evolvedWeapons = new Set<EvolutionId>();
+  private pendingEvolution: EvolutionId | undefined;
+  private activeMissionBossStage: 0 | 1 | 2 | 3 = 0;
+  private readonly spawnedNormalBossStages = new Set<1 | 2 | 3>();
+  private runFinalized = false;
   private emitTimer = 0;
   private disposed = false;
   private readonly keyDown: (event: KeyboardEvent) => void;
@@ -225,6 +296,7 @@ export class GameWorld {
     private readonly milestoneRewardPreviewLevel: number,
     private readonly obstaclePreview: boolean,
     private readonly resultPreview: boolean,
+    private readonly mode: GameMode,
   ) {
     this.enemyMaterial = this.makeMaterial("drone-shell", new Color3(0.025, 0.15, 0.17), new Color3(0.02, 0.85, 0.95));
     this.enemyMaterial.diffuseTexture = new Texture(GAME_ASSETS.dronePanel, scene, true, false);
@@ -263,9 +335,19 @@ export class GameWorld {
     this.playerCore.parent = this.player;
 
     this.keyDown = (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, button, select, textarea, [contenteditable='true']")) return;
       const key = event.key.toLowerCase();
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
         this.keys.add(key);
+        event.preventDefault();
+      }
+      if (key === " " || key === "spacebar") {
+        this.requestDodge();
+        event.preventDefault();
+      }
+      if (key === "escape") {
+        this.setPaused(this.phase !== "paused");
         event.preventDefault();
       }
     };
@@ -379,17 +461,34 @@ export class GameWorld {
     if (this.tryAdvanceLevel()) return;
     const safeDelta = Math.min(delta, 0.05);
     this.elapsed += safeDelta;
+    this.dodgeCooldown = Math.max(0, this.dodgeCooldown - safeDelta);
+    this.dodgeInvulnerable = Math.max(0, this.dodgeInvulnerable - safeDelta);
+    this.dodgeBoostSeconds = Math.max(0, this.dodgeBoostSeconds - safeDelta);
+    const bossOnlyPhase = this.enemies.some((enemy) => enemy.milestoneBoss) && !this.enemies.some((enemy) => !enemy.milestoneBoss);
+    if (!bossOnlyPhase) {
+      this.comboTimer = Math.max(0, this.comboTimer - safeDelta);
+      if (this.comboTimer <= 0) this.combo = 0;
+    }
+    this.updateNormalMission();
+    if (this.phase !== "playing") return;
     const playerMoved = this.updatePlayer(safeDelta);
     this.updateDamageWarning(safeDelta);
-    this.updateIdleHazard(safeDelta, playerMoved);
+    if (this.idlePreview) this.updateIdleHazard(safeDelta, playerMoved);
     this.updateModules(safeDelta);
+    if (this.phase !== "playing" || this.runFinalized) return;
     this.updateSpawning(safeDelta);
+    if (this.phase !== "playing" || this.runFinalized) return;
     this.updateCombat(safeDelta);
+    if (this.phase !== "playing" || this.runFinalized) return;
     this.updateOrbit(safeDelta);
+    if (this.phase !== "playing" || this.runFinalized) return;
     this.updateCorrosion(safeDelta);
+    if (this.phase !== "playing" || this.runFinalized) return;
     this.updateEnemies(safeDelta);
+    if (this.phase !== "playing") return;
     this.updateMagnetItems(safeDelta);
     this.updateGems(safeDelta);
+    if (this.phase !== "playing") return;
     this.updateRecoveryItems(safeDelta);
     this.emitTimer -= safeDelta;
     if (this.emitTimer <= 0) {
@@ -401,6 +500,61 @@ export class GameWorld {
   setTouchDirection(x: number, z: number) {
     this.touchDirection.set(x, 0, z);
     if (this.touchDirection.lengthSquared() > 1) this.touchDirection.normalize();
+  }
+
+  setPaused(paused: boolean) {
+    if (paused && this.phase === "playing") {
+      this.phase = "paused";
+      this.touchDirection.setAll(0);
+      this.keys.clear();
+      this.emitSnapshot();
+      return;
+    }
+    if (!paused && this.phase === "paused" && this.outcome === "running") {
+      this.phase = "playing";
+      this.emitSnapshot();
+    }
+  }
+
+  retire() {
+    if (this.phase !== "playing" && this.phase !== "paused") return;
+    this.finishRun("retired", "プレイヤーが出撃を終了");
+  }
+
+  requestDodge() {
+    if (this.phase !== "playing" || this.dodgeCooldown > 0) return;
+    const dodgeOrigin = this.player.position.clone();
+    const perfectlyTimed = this.hasImminentDodgeThreat(dodgeOrigin);
+    let direction = this.getInputDirection();
+    if (direction.lengthSquared() < 0.01) direction = this.lastMoveDirection.clone();
+    if (direction.lengthSquared() < 0.01) direction.set(Math.sin(this.player.rotation.y), 0, Math.cos(this.player.rotation.y));
+    direction.normalize();
+    this.player.position.addInPlace(direction.scale(DODGE_DISTANCE));
+    this.resolvePlayerObstacleCollisions();
+    this.clampToArena(this.player.position, PLAYER_SAFE_BOUND);
+    this.lastMoveDirection.copyFrom(direction);
+    this.player.rotation.y = Math.atan2(direction.x, direction.z);
+    this.dodgeCooldown = DODGE_COOLDOWN_SECONDS;
+    this.dodgeInvulnerable = DODGE_INVULNERABILITY_SECONDS;
+    this.dodgePerfectRegistered = false;
+    if (perfectlyTimed) this.registerPerfectDodge();
+    this.emitSnapshot();
+  }
+
+  chooseBossReward(id: BossRewardId) {
+    if (this.phase !== "bossReward") return;
+    const selectedReward = this.getBossRewardOptions().find((reward) => reward.id === id);
+    if (!selectedReward?.enabled) return;
+    if (id === "repair") {
+      this.health = Math.min(this.maxHealth, this.health + Math.max(28, Math.ceil(this.maxHealth * 0.35)));
+    } else if (id === "amplify") {
+      this.attackAmplifier = Math.min(1.48, this.attackAmplifier + 0.08);
+    } else if (this.pendingEvolution) {
+      this.activateEvolution(this.pendingEvolution);
+    }
+    this.pendingEvolution = undefined;
+    this.phase = "playing";
+    this.emitSnapshot();
   }
 
   setCameraBasis(forward: Vector3, right: Vector3) {
@@ -419,23 +573,42 @@ export class GameWorld {
 
   chooseUpgrade(id: UpgradeId) {
     if (this.phase !== "upgrade") return;
+    if (!this.upgradeOptions.some((option) => option.id === id)) return;
     if (this.isModuleId(id)) {
       this.moduleTiers[id] = Math.min(3, this.moduleTiers[id] + 1);
       this.activateModule(id);
     } else if (id === "pulse") {
-      this.damage += 8;
-      this.weaponTier += 1;
+      if (this.weaponTier < 3) {
+        this.weaponTier += 1;
+        this.damage = 14 + (this.weaponTier - 1) * 8;
+      } else {
+        this.railMastery += 1;
+        this.attackAmplifier = Math.min(1.8, this.attackAmplifier + 0.02);
+      }
     } else if (id === "scatter") {
       this.activateScatter();
     } else if (id === "orbit") {
       this.activateOrbit();
     } else if (id === "relay") {
-      this.shotDelay = Math.max(0.16, this.shotDelay - 0.08);
-      this.playerSpeed += 0.7;
+      if (this.relayTier < 4) {
+        this.relayTier += 1;
+        this.shotDelay = Math.max(0.16, this.shotDelay - 0.08);
+        this.playerSpeed += 0.7;
+      } else {
+        this.relayMastery += 1;
+        this.playerSpeed = Math.min(12.5, this.playerSpeed + 0.18);
+      }
     } else {
-      this.maxHealth = Math.min(PLAYER_MAX_HEALTH_CAP, this.maxHealth + 8);
-      this.health = Math.min(this.maxHealth, this.health + 30);
-      this.magnetRadius += 0.45;
+      if (this.barrierTier < 4) {
+        this.barrierTier += 1;
+        this.maxHealth = Math.min(PLAYER_MAX_HEALTH_CAP, this.maxHealth + 8);
+        this.health = Math.min(this.maxHealth, this.health + 30);
+        this.magnetRadius += 0.45;
+      } else {
+        this.barrierMastery += 1;
+        this.health = Math.min(this.maxHealth, this.health + 20);
+        this.magnetRadius = Math.min(9, this.magnetRadius + 0.08);
+      }
     }
     this.phase = "playing";
     this.upgradeOptions = [];
@@ -501,13 +674,20 @@ export class GameWorld {
     this.clusterCores.length = 0;
     this.clusterShards.length = 0;
     this.milestoneBossLevels.clear();
+    this.spawnedNormalBossStages.clear();
+    this.evolvedWeapons.clear();
     this.combatStats = this.createCombatStats();
     this.player.position.x = 0;
     this.player.position.z = 0;
+    this.keys.clear();
+    this.touchDirection.setAll(0);
+    this.lastMoveDirection.set(0, 0, 1);
     this.phase = "playing";
+    this.outcome = "running";
     this.health = 100;
     this.maxHealth = 100;
     this.damageFlash = 0;
+    this.dangerSignal = 0;
     this.playerRing.scaling.setAll(1);
     this.playerHitRing.isVisible = false;
     this.xp = 0;
@@ -518,6 +698,11 @@ export class GameWorld {
     this.weaponTier = 1;
     this.scatterTier = 0;
     this.orbitTier = 0;
+    this.relayTier = 0;
+    this.barrierTier = 0;
+    this.railMastery = 0;
+    this.relayMastery = 0;
+    this.barrierMastery = 0;
     this.moduleTiers.vector = 0;
     this.moduleTiers.nova = 0;
     this.moduleTiers.mirage = 0;
@@ -580,10 +765,33 @@ export class GameWorld {
     this.clusterTimer = 0;
     this.sawAngle = 0;
     this.spawnTimer = 0;
+    this.encounterTimer = 28;
+    this.encounterQueue.length = 0;
+    this.activeEncounterLabel = "通常侵入";
     this.damageTimer = 0;
     this.lastDamageSource = "none";
     this.idleSeconds = 0;
     this.idleStrikeCooldown = 0;
+    this.score = 0;
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.maxCombo = 0;
+    this.bossesDefeated = 0;
+    this.perfectDodges = 0;
+    this.dodgeCooldown = 0;
+    this.dodgeInvulnerable = 0;
+    this.dodgeBoostSeconds = 0;
+    this.dodgePerfectRegistered = false;
+    this.attackAmplifier = 1;
+    this.deathCause = null;
+    this.pendingEvolution = undefined;
+    this.activeMissionBossStage = 0;
+    this.runFinalized = false;
+    this.debugHits = 0;
+    this.debugKills = 0;
+    this.debugEntries = 0;
+    this.debugProjectilesFired = 0;
+    this.debugProjectileCollisions = 0;
     this.emitSnapshot();
   }
 
@@ -593,6 +801,10 @@ export class GameWorld {
     window.removeEventListener("keydown", this.keyDown);
     window.removeEventListener("keyup", this.keyUp);
     this.player.dispose();
+    [...this.projectiles].forEach((projectile) => projectile.mesh.dispose());
+    [...this.gems].forEach((gem) => gem.mesh.dispose());
+    [...this.recoveryItems].forEach((item) => item.mesh.dispose());
+    [...this.magnetItems].forEach((item) => item.mesh.dispose());
     [...this.orbitBlades].forEach((blade) => blade.dispose());
     [...this.mirageDrones].forEach((drone) => drone.dispose());
     [...this.pylons].forEach((pylon) => pylon.mesh.dispose());
@@ -632,6 +844,7 @@ export class GameWorld {
     const moved = move.lengthSquared() > 0.0004;
     if (moved) {
       move.normalize();
+      this.lastMoveDirection.copyFrom(move);
       this.player.position.addInPlace(move.scale(this.playerSpeed * delta));
       this.player.rotation.y = Math.atan2(move.x, move.z);
     }
@@ -678,6 +891,7 @@ export class GameWorld {
   }
 
   private launchIdleNeedle(target: Vector3, fallDuration = 2) {
+    this.dangerSignal += 1;
     const marker = MeshBuilder.CreateTorus("idle-needle-warning", { diameter: 2.05, thickness: 0.095, tessellation: 28 }, this.scene);
     marker.position.copyFrom(target);
     marker.position.y = 0.12;
@@ -823,6 +1037,12 @@ export class GameWorld {
     this.elapsed = 168;
     this.level = 24;
     this.health = 0;
+    this.score = 28450;
+    this.maxCombo = 38;
+    this.bossesDefeated = 2;
+    this.perfectDodges = 4;
+    this.outcome = "failed";
+    this.deathCause = "重装機の範囲砲撃";
     this.phase = "gameover";
   }
 
@@ -882,7 +1102,71 @@ export class GameWorld {
     this.resolvePlayerObstacleCollisions();
   }
 
+  private updateNormalMission() {
+    if (this.mode !== "normal" || this.outcome !== "running") return;
+    if (isNormalTargetReached(this.elapsed)) {
+      this.finishRun("failed", "制限時間内に最終ボスを撃破できず");
+      return;
+    }
+    if (this.activeMissionBossStage > 0) return;
+    for (let index = 0; index < NORMAL_BOSS_TIMINGS.length; index += 1) {
+      const stage = (index + 1) as 1 | 2 | 3;
+      if (this.elapsed < NORMAL_BOSS_TIMINGS[index] || this.spawnedNormalBossStages.has(stage)) continue;
+      this.spawnedNormalBossStages.add(stage);
+      this.spawnMissionBoss(stage);
+      break;
+    }
+  }
+
+  private spawnMissionBoss(stage: 1 | 2 | 3) {
+    this.clearNonBossEnemies();
+    const kind: EnemyKind = stage === 1 ? "scout" : stage === 2 ? "striker" : "bulwark";
+    this.spawnEnemy(kind, undefined, false);
+    const boss = this.enemies[this.enemies.length - 1];
+    const baseHp = 14 + Math.floor(this.elapsed / 25) * 4;
+    boss.milestoneBoss = true;
+    boss.missionBossStage = stage;
+    boss.hp = baseHp * (stage === 3 ? 90 : 40);
+    boss.maxHp = boss.hp;
+    boss.scale *= stage === 3 ? 2.25 : 1.95;
+    boss.mesh.scaling.setAll(boss.scale);
+    boss.mesh.position.copyFrom(this.player.position.add(new Vector3(0, 0.8, -Math.min(14, 9 + stage * 1.5))));
+    boss.enteringContainment = false;
+    if (stage === 1) boss.speed *= 0.46;
+    boss.summonTimer = stage === 1 ? 3.8 : Number.POSITIVE_INFINITY;
+    boss.strikerCooldown = stage === 2 ? 1.2 : boss.strikerCooldown;
+    boss.bossCooldown = stage === 3 ? 1.3 : boss.bossCooldown;
+    if (!boss.healthFill) boss.healthFill = this.createBossHealthBar(boss.mesh);
+    const crown = MeshBuilder.CreateTorus("mission-boss-crown", { diameter: stage === 3 ? 1.55 : 1.25, thickness: 0.14, tessellation: 28 }, this.scene);
+    crown.parent = boss.mesh;
+    crown.position.set(0, 1.42, 0);
+    crown.material = stage === 1 ? this.recoveryMaterial : stage === 2 ? this.gemMaterial : this.projectileMaterial;
+    boss.milestoneCrown = crown;
+    this.activeMissionBossStage = stage;
+    this.activeEncounterLabel = `${NORMAL_BOSS_LABELS[stage]}戦`;
+    const arrival = MeshBuilder.CreateTorus("mission-boss-arrival", { diameter: 2.8, thickness: 0.15, tessellation: 32 }, this.scene);
+    arrival.position.copyFrom(boss.mesh.position);
+    arrival.position.y = 0.18;
+    arrival.material = this.enemyThreatMaterial;
+    this.shockwaves.push({ mesh: arrival, life: 0.85, maxLife: 0.85 });
+    this.emitSnapshot();
+  }
+
+  private clearNonBossEnemies() {
+    for (let index = this.enemies.length - 1; index >= 0; index -= 1) {
+      const enemy = this.enemies[index];
+      if (enemy.milestoneBoss) continue;
+      enemy.corrosionMark?.dispose();
+      enemy.variantAura?.dispose();
+      enemy.strikerMarker?.dispose();
+      enemy.bossMarker?.dispose();
+      enemy.mesh.dispose();
+      this.enemies.splice(index, 1);
+    }
+  }
+
   private ensureMilestoneBossForCurrentLevel() {
+    if (this.mode === "normal") return;
     if (this.level < 5 || this.level % 5 !== 0 || this.milestoneBossLevels.has(this.level)) return;
     this.milestoneBossLevels.add(this.level);
     this.spawnMilestoneBoss(this.level);
@@ -943,12 +1227,42 @@ export class GameWorld {
 
   private updateSpawning(delta: number) {
     if (this.auditModule) return;
+    if (this.activeMissionBossStage > 0) return;
+    if (this.mode === "normal") this.updateEncounterDirector(delta);
     this.spawnTimer -= delta;
     if (this.spawnTimer > 0) return;
-    const spawnProfile = this.getHighLevelSpawnProfile();
+    const spawnProfile = this.mode === "normal" ? this.getNormalSpawnProfile() : this.getHighLevelSpawnProfile();
     const availableSlots = Math.max(0, spawnProfile.enemyCap - this.enemies.length);
-    for (let i = 0; i < Math.min(spawnProfile.batch, availableSlots); i += 1) this.spawnEnemy();
+    for (let i = 0; i < Math.min(spawnProfile.batch, availableSlots); i += 1) {
+      const queuedKind = this.encounterQueue.shift();
+      this.spawnEnemy(queuedKind);
+    }
     this.spawnTimer = spawnProfile.interval;
+  }
+
+  private getNormalSpawnProfile() {
+    if (this.elapsed < 90) return { enemyCap: 42, batch: 1, interval: Math.max(0.6, 0.9 - this.elapsed / 300) };
+    if (this.elapsed < 180) return { enemyCap: 46, batch: 1, interval: 0.46 };
+    if (this.elapsed < 300) return { enemyCap: 50, batch: 2, interval: 0.67 };
+    if (this.elapsed < 420) return { enemyCap: 54, batch: 2, interval: 0.61 };
+    if (this.elapsed < 540) return { enemyCap: NORMAL_MAX_ENEMIES, batch: 2, interval: 0.56 };
+    const interval = Math.max(2 / NORMAL_MAX_ENEMIES_PER_SECOND, 0.5);
+    return { enemyCap: NORMAL_MAX_ENEMIES, batch: 2, interval };
+  }
+
+  private updateEncounterDirector(delta: number) {
+    this.encounterTimer -= delta;
+    if (this.encounterTimer > 0 || this.encounterQueue.length > 0 || this.elapsed < 70) return;
+    const templates: Array<{ label: string; enemies: EnemyKind[] }> = [
+      { label: "高速侵入", enemies: ["striker", "striker", "striker", "scout", "scout", "scout"] },
+      { label: "正面突破", enemies: ["bulwark", "scout", "scout", "scout", "scout"] },
+      { label: "精鋭部隊", enemies: ["bulwark", "striker", "striker"] },
+      { label: "大群", enemies: ["scout", "scout", "scout", "scout", "scout", "scout", "scout", "scout"] },
+    ];
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    this.activeEncounterLabel = template.label;
+    this.encounterQueue.push(...template.enemies);
+    this.encounterTimer = 26 + Math.random() * 12;
   }
 
   private getHighLevelRewardTier() {
@@ -1010,9 +1324,10 @@ export class GameWorld {
       variantAura.parent = body;
       variantAura.position.y = -0.32;
       variantAura.material = profile.material;
+      this.addVariantSilhouette(body, variant!.trait, profile.material);
     }
     const healthFill = kind === "bulwark" ? this.createBossHealthBar(body) : undefined;
-    this.enemies.push({ mesh: body, kind, hp: profile.hp, maxHp: profile.hp, speed: profile.speed, scale: profile.scale, contactDamage: profile.contactDamage, xpValue: profile.xpValue, highVariant, variantTimer: 0.8 + Math.random() * 0.75, variantBurst: 0, variantAura, healthFill, hitFlash: 0, orbitCooldown: 0, cryoTime: 0, corrosionTime: 0, corrosionStacks: 0, corrosionTick: 0, enteringContainment: true, strikerAction: "none", strikerTimer: 0, strikerCooldown: kind === "striker" ? 1.8 + Math.random() * 1.4 : 0, strikerVector: Vector3.Zero(), strikerDashHit: false, bossAction: "none", bossTimer: 0, bossCooldown: kind === "bulwark" ? 2.6 + Math.random() * 1.1 : 0, bossTarget: Vector3.Zero(), bossVector: Vector3.Zero(), bossChargeHit: false, bossBursts: 0, bossEnraged: false });
+    this.enemies.push({ mesh: body, kind, hp: profile.hp, maxHp: profile.hp, speed: profile.speed, scale: profile.scale, contactDamage: profile.contactDamage, xpValue: profile.xpValue, highVariant, variantTimer: 0.8 + Math.random() * 0.75, variantBurst: 0, variantAura, healthFill, hitFlash: 0, orbitCooldown: 0, cryoTime: 0, corrosionTime: 0, corrosionStacks: 0, corrosionTick: 0, enteringContainment: true, strikerAction: "none", strikerTimer: 0, strikerCooldown: kind === "striker" ? 1.8 + Math.random() * 1.4 : 0, strikerVector: Vector3.Zero(), strikerDashHit: false, bossAction: "none", bossTimer: 0, bossCooldown: kind === "bulwark" ? 2.6 + Math.random() * 1.1 : 0, bossTarget: Vector3.Zero(), bossVector: Vector3.Zero(), bossChargeHit: false, bossBursts: 0, bossEnraged: false, vulnerableTime: 0, summonTimer: Number.POSITIVE_INFINITY, lastTargetedAt: -1 });
     this.createWallBreach(ingress.breach, profile.material);
   }
 
@@ -1037,6 +1352,21 @@ export class GameWorld {
     return fill;
   }
 
+  private addVariantSilhouette(parent: AbstractMesh, trait: VariantTrait, material: StandardMaterial) {
+    let marker: AbstractMesh;
+    if (trait === "pulse") marker = MeshBuilder.CreateTorus("variant-pulse-crown", { diameter: 1.3, thickness: 0.11, tessellation: 18 }, this.scene);
+    else if (trait === "armor") marker = MeshBuilder.CreateBox("variant-armor-plate", { width: 1.25, height: 0.28, depth: 0.38 }, this.scene);
+    else if (trait === "swarm") marker = MeshBuilder.CreatePolyhedron("variant-swarm-spines", { type: 0, size: 0.62 }, this.scene);
+    else if (trait === "siege") marker = MeshBuilder.CreateCylinder("variant-siege-tower", { height: 0.85, diameterTop: 0.25, diameterBottom: 0.72, tessellation: 6 }, this.scene);
+    else if (trait === "drift") marker = MeshBuilder.CreateBox("variant-drift-wing", { width: 1.7, height: 0.12, depth: 0.34 }, this.scene);
+    else if (trait === "skirmish") marker = MeshBuilder.CreateCylinder("variant-skirmish-lance", { height: 1.45, diameterTop: 0.05, diameterBottom: 0.2, tessellation: 5 }, this.scene);
+    else marker = MeshBuilder.CreateBox("variant-surge-fin", { width: 0.26, height: 0.72, depth: 1.25 }, this.scene);
+    marker.parent = parent;
+    marker.position.y = trait === "pulse" ? 0.82 : 0.55;
+    if (trait === "skirmish") marker.rotation.x = Math.PI / 2;
+    marker.material = material;
+  }
+
   private pickEnemyKind(): EnemyKind {
     const roll = Math.random();
     if (this.demoMode) return roll < 0.34 ? "scout" : roll < 0.7 ? "striker" : "bulwark";
@@ -1047,9 +1377,11 @@ export class GameWorld {
   }
 
   private pickHighVariant(): HighVariantId | undefined {
-    const chance = this.level >= 60 ? 0.5 : this.level >= 50 ? 0.4 : this.level >= 40 ? 0.3 : 0;
+    const endlessChance = this.level >= 60 ? 0.5 : this.level >= 50 ? 0.4 : this.level >= 40 ? 0.3 : 0;
+    const chance = this.mode === "normal" ? Math.min(0.35, endlessChance) : endlessChance;
     if (chance === 0 || Math.random() >= chance) return undefined;
-    const unlocked = HIGH_VARIANT_IDS.filter((id) => HIGH_VARIANTS[id].unlockLevel <= this.level);
+    const activePulseVariants = this.enemies.filter((enemy) => enemy.highVariant && HIGH_VARIANTS[enemy.highVariant].trait === "pulse").length;
+    const unlocked = HIGH_VARIANT_IDS.filter((id) => HIGH_VARIANTS[id].unlockLevel <= this.level && (activePulseVariants < 3 || HIGH_VARIANTS[id].trait !== "pulse"));
     if (unlocked.length === 0) return undefined;
     return unlocked[Math.floor(Math.random() * unlocked.length)];
   }
@@ -1086,7 +1418,7 @@ export class GameWorld {
         enemy.hitFlash = 0.12;
         projectile.mesh.dispose();
         this.projectiles.splice(i, 1);
-        if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
     }
   }
@@ -1110,16 +1442,13 @@ export class GameWorld {
   }
 
   private fireScatter() {
-    let target: Enemy | undefined;
-    let nearest = Number.POSITIVE_INFINITY;
-    for (const enemy of this.enemies) {
-      if (!this.isCombatTarget(enemy)) continue;
-      const distance = Vector3.DistanceSquared(enemy.mesh.position, this.player.position);
-      if (distance < nearest) { nearest = distance; target = enemy; }
+    const aim = this.lastMoveDirection.clone();
+    if (aim.lengthSquared() < 0.01) {
+      const target = this.getNearestTarget(this.player.position);
+      if (!target) return;
+      aim.copyFrom(target.mesh.position.subtract(this.player.position));
+      aim.y = 0;
     }
-    if (!target) return;
-    const aim = target.mesh.position.subtract(this.player.position);
-    aim.y = 0;
     aim.normalize();
     const baseAngle = Math.atan2(aim.z, aim.x);
     const spread = 0.34;
@@ -1190,36 +1519,78 @@ export class GameWorld {
     if (id === "saw") this.ensureSawHalo();
   }
 
+  private activateEvolution(id: EvolutionId) {
+    this.evolvedWeapons.add(id);
+    if (id === "mirage-pylon") {
+      this.mirageDrones.forEach((drone) => drone.dispose());
+      this.mirageDrones.length = 0;
+      this.deployPylon();
+    }
+    if (id === "nova-saw") this.ensureSawHalo();
+    if (id === "mine-decoy") this.deployDecoy();
+  }
+
+  private hasEvolution(id: EvolutionId) {
+    return this.evolvedWeapons.has(id);
+  }
+
+  private isSimulationActive() {
+    return this.phase === "playing" && !this.runFinalized;
+  }
+
+  private getEligibleEvolution() {
+    return EVOLUTION_RECIPES.find((recipe) => !this.evolvedWeapons.has(recipe.id) && recipe.modules.every((moduleId) => this.moduleTiers[moduleId] >= 3));
+  }
+
   private updateModules(delta: number) {
     this.updateShockwaves(delta);
+    if (!this.isSimulationActive()) return;
     this.updatePylons(delta);
+    if (!this.isSimulationActive()) return;
     this.updateMirageDrones(delta);
+    if (!this.isSimulationActive()) return;
     this.updateRicochetShots(delta);
+    if (!this.isSimulationActive()) return;
     this.updateGravityCores(delta);
+    if (!this.isSimulationActive()) return;
     this.updateDecoys(delta);
+    if (!this.isSimulationActive()) return;
     this.updateArcShells(delta);
+    if (!this.isSimulationActive()) return;
     this.updateSplitShells(delta);
+    if (!this.isSimulationActive()) return;
     this.updateReturnBlades(delta);
+    if (!this.isSimulationActive()) return;
     this.updateEnergyTraces(delta);
+    if (!this.isSimulationActive()) return;
     this.updateMines(delta);
+    if (!this.isSimulationActive()) return;
     this.updateSkyfallStrikes(delta);
+    if (!this.isSimulationActive()) return;
     this.updateNeedleDrops(delta);
+    if (!this.isSimulationActive()) return;
     this.updateSawHalo(delta);
+    if (!this.isSimulationActive()) return;
     this.updateHarpoons(delta);
+    if (!this.isSimulationActive()) return;
     this.updateClusterCores(delta);
+    if (!this.isSimulationActive()) return;
     this.updateClusterShards(delta);
+    if (!this.isSimulationActive()) return;
 
     if (this.moduleTiers.vector > 0) {
       this.vectorTimer -= delta;
       if (this.vectorTimer <= 0) {
         this.fireVectorLance();
+        if (!this.isSimulationActive()) return;
         this.vectorTimer = Math.max(0.78, 2.45 - this.moduleTiers.vector * 0.36);
       }
     }
-    if (this.moduleTiers.nova > 0) {
+    if (this.moduleTiers.nova > 0 && !this.hasEvolution("nova-saw")) {
       this.novaTimer -= delta;
       if (this.novaTimer <= 0) {
         this.triggerNovaRing(this.moduleTiers.nova);
+        if (!this.isSimulationActive()) return;
         this.novaTimer = Math.max(1.2, 3.8 - this.moduleTiers.nova * 0.52);
       }
     }
@@ -1227,6 +1598,7 @@ export class GameWorld {
       this.pylonTimer -= delta;
       if (this.pylonTimer <= 0) {
         this.deployPylon();
+        if (!this.isSimulationActive()) return;
         this.pylonTimer = Math.max(5, 11 - this.moduleTiers.pylon * 1.4);
       }
     }
@@ -1234,6 +1606,7 @@ export class GameWorld {
       this.ricochetTimer -= delta;
       if (this.ricochetTimer <= 0) {
         this.fireRicochetBurst();
+        if (!this.isSimulationActive()) return;
         this.ricochetTimer = Math.max(0.56, 1.5 - this.moduleTiers.ricochet * 0.18);
       }
     }
@@ -1241,6 +1614,7 @@ export class GameWorld {
       this.gravityTimer -= delta;
       if (this.gravityTimer <= 0) {
         this.spawnGravityCore();
+        if (!this.isSimulationActive()) return;
         this.gravityTimer = Math.max(3.4, 7.8 - this.moduleTiers.gravity * 1.05);
       }
     }
@@ -1248,13 +1622,15 @@ export class GameWorld {
       this.decoyTimer -= delta;
       if (this.decoyTimer <= 0) {
         this.deployDecoy();
+        if (!this.isSimulationActive()) return;
         this.decoyTimer = Math.max(4.2, 8.2 - this.moduleTiers.decoy * 0.95);
       }
     }
-    if (this.moduleTiers.mortar > 0) {
+    if (this.moduleTiers.mortar > 0 && !this.hasEvolution("gravity-mortar")) {
       this.mortarTimer -= delta;
       if (this.mortarTimer <= 0) {
         this.fireMortarArc();
+        if (!this.isSimulationActive()) return;
         this.mortarTimer = Math.max(2.2, 5.3 - this.moduleTiers.mortar * 0.72);
       }
     }
@@ -1262,6 +1638,7 @@ export class GameWorld {
       this.splitTimer -= delta;
       if (this.splitTimer <= 0) {
         this.fireSplitShell();
+        if (!this.isSimulationActive()) return;
         this.splitTimer = Math.max(0.82, 2.05 - this.moduleTiers.split * 0.26);
       }
     }
@@ -1269,27 +1646,31 @@ export class GameWorld {
       this.boomerangTimer -= delta;
       if (this.boomerangTimer <= 0) {
         this.throwReturnBlade();
+        if (!this.isSimulationActive()) return;
         this.boomerangTimer = Math.max(1.15, 3.1 - this.moduleTiers.boomerang * 0.35);
       }
     }
-    if (this.moduleTiers.laser > 0) {
+    if (this.moduleTiers.laser > 0 && !this.hasEvolution("vector-laser")) {
       this.laserTimer -= delta;
       if (this.laserTimer <= 0) {
         this.fireIonLance();
+        if (!this.isSimulationActive()) return;
         this.laserTimer = Math.max(0.46, 1.45 - this.moduleTiers.laser * 0.16);
       }
     }
-    if (this.moduleTiers.chain > 0) {
+    if (this.moduleTiers.chain > 0 && !this.hasEvolution("ricochet-chain")) {
       this.chainTimer -= delta;
       if (this.chainTimer <= 0) {
         this.fireArcLink();
+        if (!this.isSimulationActive()) return;
         this.chainTimer = Math.max(0.82, 2.2 - this.moduleTiers.chain * 0.24);
       }
     }
-    if (this.moduleTiers.mine > 0) {
+    if (this.moduleTiers.mine > 0 && !this.hasEvolution("mine-decoy")) {
       this.mineTimer -= delta;
       if (this.mineTimer <= 0) {
         this.deployMine();
+        if (!this.isSimulationActive()) return;
         this.mineTimer = Math.max(2.4, 5 - this.moduleTiers.mine * 0.6);
       }
     }
@@ -1297,6 +1678,7 @@ export class GameWorld {
       this.fanTimer -= delta;
       if (this.fanTimer <= 0) {
         this.firePrismFan();
+        if (!this.isSimulationActive()) return;
         this.fanTimer = Math.max(0.64, 1.85 - this.moduleTiers.fan * 0.2);
       }
     }
@@ -1304,6 +1686,7 @@ export class GameWorld {
       this.skyfallTimer -= delta;
       if (this.skyfallTimer <= 0) {
         this.deploySkyfallMarker();
+        if (!this.isSimulationActive()) return;
         this.skyfallTimer = Math.max(2.4, 5 - this.moduleTiers.skyfall * 0.55);
       }
     }
@@ -1311,6 +1694,7 @@ export class GameWorld {
       this.cleaverTimer -= delta;
       if (this.cleaverTimer <= 0) {
         this.firePhaseCleaver();
+        if (!this.isSimulationActive()) return;
         this.cleaverTimer = Math.max(1.1, 3.05 - this.moduleTiers.cleaver * 0.3);
       }
     }
@@ -1318,6 +1702,7 @@ export class GameWorld {
       this.needleTimer -= delta;
       if (this.needleTimer <= 0) {
         this.fireNeedleRain();
+        if (!this.isSimulationActive()) return;
         this.needleTimer = Math.max(1.6, 4.4 - this.moduleTiers.needle * 0.48);
       }
     }
@@ -1325,6 +1710,7 @@ export class GameWorld {
       this.harpoonTimer -= delta;
       if (this.harpoonTimer <= 0) {
         this.fireChainHarpoon();
+        if (!this.isSimulationActive()) return;
         this.harpoonTimer = Math.max(1.6, 3.7 - this.moduleTiers.harpoon * 0.4);
       }
     }
@@ -1332,6 +1718,7 @@ export class GameWorld {
       this.thermalTimer -= delta;
       if (this.thermalTimer <= 0) {
         this.fireThermalArc();
+        if (!this.isSimulationActive()) return;
         this.thermalTimer = Math.max(1, 2.85 - this.moduleTiers.thermal * 0.27);
       }
     }
@@ -1339,6 +1726,7 @@ export class GameWorld {
       this.sonicTimer -= delta;
       if (this.sonicTimer <= 0) {
         this.fireSonicBreaker();
+        if (!this.isSimulationActive()) return;
         this.sonicTimer = Math.max(1.1, 3.5 - this.moduleTiers.sonic * 0.36);
       }
     }
@@ -1346,18 +1734,31 @@ export class GameWorld {
       this.clusterTimer -= delta;
       if (this.clusterTimer <= 0) {
         this.fireClusterCore();
+        if (!this.isSimulationActive()) return;
         this.clusterTimer = Math.max(1.35, 3.35 - this.moduleTiers.cluster * 0.32);
       }
     }
   }
 
   private fireVectorLance() {
-    const target = this.getNearestTarget(this.player.position);
+    const target = this.getHighestHealthTarget(this.player.position);
     if (!target) return;
     const tier = this.moduleTiers.vector;
     const aim = target.mesh.position.subtract(this.player.position);
     aim.y = 0;
     aim.normalize();
+    if (this.hasEvolution("vector-laser")) {
+      const start = this.player.position.add(new Vector3(0, 1.04, 0));
+      const end = start.add(aim.scale(18));
+      this.createEnergyTrace(start, end, 0.28, this.magnetMaterial, 0.22);
+      for (let index = this.enemies.length - 1; index >= 0; index -= 1) {
+        const enemy = this.enemies[index];
+        if (!this.isCombatTarget(enemy) || !this.isEnemyHitByTrace(enemy, start, end, 1.05)) continue;
+        this.applyDamage(enemy, 92 + (this.moduleTiers.laser + tier) * 16, "vector");
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
+      }
+      return;
+    }
     const offsets = tier === 3 ? [-0.1, 0, 0.1] : [0];
     for (const offset of offsets) {
       const angle = Math.atan2(aim.z, aim.x) + offset;
@@ -1379,7 +1780,7 @@ export class GameWorld {
       if (offset.length() > radius) continue;
       this.applyDamage(enemy, 18 + tier * 13, "nova");
       if (offset.length() > 0.1) enemy.mesh.position.addInPlace(offset.normalize().scale(0.55 + tier * 0.25));
-      if (enemy.hp <= 0) this.destroyEnemy(index);
+      if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
   }
 
@@ -1387,12 +1788,14 @@ export class GameWorld {
     const target = this.getNearestTarget(this.player.position);
     if (!target) return;
     const tier = this.moduleTiers.ricochet;
-    for (let count = 0; count < tier; count += 1) {
+    const evolved = this.hasEvolution("ricochet-chain");
+    const shotCount = evolved ? 1 : tier;
+    for (let count = 0; count < shotCount; count += 1) {
       const orb = MeshBuilder.CreateSphere("rico-burst", { diameter: 0.24, segments: 6 }, this.scene);
       orb.position.copyFrom(this.player.position);
       orb.position.y = 1.12;
-      orb.material = this.gemMaterial;
-      this.ricochetShots.push({ mesh: orb, target, life: 4.2, damage: 11 + tier * 7, bounces: 1 + tier, hitTargets: new Set() });
+      orb.material = evolved ? this.magnetMaterial : this.gemMaterial;
+      this.ricochetShots.push({ mesh: orb, target, life: evolved ? 5.2 : 4.2, damage: evolved ? 42 + this.moduleTiers.chain * 8 : 11 + tier * 7, bounces: evolved ? 8 : 1 + tier, hitTargets: new Set() });
     }
   }
 
@@ -1418,8 +1821,7 @@ export class GameWorld {
       const hitPosition = shot.target.mesh.position.clone();
       this.applyDamage(shot.target, shot.damage, "ricochet");
       shot.hitTargets.add(shot.target.mesh);
-      const targetIndex = this.enemies.indexOf(shot.target);
-      if (shot.target.hp <= 0 && targetIndex >= 0) this.destroyEnemy(targetIndex);
+      if (shot.target.hp <= 0) this.destroyEnemy(shot.target);
       shot.bounces -= 1;
       const next = shot.bounces > 0 ? this.findBounceTarget(hitPosition, shot.hitTargets) : undefined;
       if (!next) { shot.mesh.dispose(); this.ricochetShots.splice(index, 1); continue; }
@@ -1439,7 +1841,7 @@ export class GameWorld {
   }
 
   private spawnGravityCore() {
-    const target = this.getNearestTarget(this.player.position);
+    const target = this.getDensestTarget(this.player.position);
     if (!target) return;
     const core = MeshBuilder.CreateSphere("singularity-core", { diameter: 0.78, segments: 10 }, this.scene);
     core.position.copyFrom(target.mesh.position);
@@ -1467,14 +1869,22 @@ export class GameWorld {
         enemy.mesh.position.addInPlace(pull.scale(delta * (2.8 + tier * 1.4) / distance));
         if (!dealPulse) continue;
         this.applyDamage(enemy, 3 + tier * 3, "gravity");
-        if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
       if (core.life > 0) continue;
+      const evolved = this.hasEvolution("gravity-mortar");
+      if (evolved) {
+        const impact = MeshBuilder.CreateTorus("singularity-mortar-impact", { diameter: 1.1, thickness: 0.14, tessellation: 30 }, this.scene);
+        impact.position.copyFrom(core.mesh.position);
+        impact.position.y = 0.2;
+        impact.material = this.projectileMaterial;
+        this.shockwaves.push({ mesh: impact, life: 0.48, maxLife: 0.48 });
+      }
       for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
         const enemy = this.enemies[enemyIndex];
         if (Vector3.DistanceSquared(enemy.mesh.position, core.mesh.position) > radius * radius) continue;
-        this.applyDamage(enemy, 15 + tier * 11, "gravity");
-        if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+        this.applyDamage(enemy, 15 + tier * 11 + (evolved ? 52 + this.moduleTiers.mortar * 14 : 0), "gravity");
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
       core.mesh.dispose();
       this.gravityCores.splice(index, 1);
@@ -1493,6 +1903,7 @@ export class GameWorld {
     beacon.position.y = 0.62;
     beacon.material = this.recoveryMaterial;
     this.decoys.push({ mesh: beacon, life: 6.6 + allowed * 2, pulse: 0.18 });
+    if (this.hasEvolution("mine-decoy")) this.deployMine(beacon.position);
   }
 
   private updateDecoys(delta: number) {
@@ -1509,7 +1920,7 @@ export class GameWorld {
           const enemy = this.enemies[enemyIndex];
           if (Vector3.DistanceSquared(enemy.mesh.position, decoy.mesh.position) > pulseRadius * pulseRadius) continue;
           this.applyDamage(enemy, 6 + tier * 5, "decoy");
-          if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+          if (enemy.hp <= 0) this.destroyEnemy(enemy);
         }
       }
       if (decoy.life > 0) continue;
@@ -1518,7 +1929,7 @@ export class GameWorld {
         const enemy = this.enemies[enemyIndex];
         if (Vector3.DistanceSquared(enemy.mesh.position, decoy.mesh.position) > radius * radius) continue;
         this.applyDamage(enemy, 30 + tier * 16, "decoy");
-        if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
       decoy.mesh.dispose();
       this.decoys.splice(index, 1);
@@ -1536,7 +1947,7 @@ export class GameWorld {
   }
 
   private fireMortarArc() {
-    const target = this.getNearestTarget(this.player.position);
+    const target = this.getDensestTarget(this.player.position);
     if (!target) return;
     const tier = this.moduleTiers.mortar;
     const shellCount = tier === 3 ? 3 : tier;
@@ -1569,7 +1980,7 @@ export class GameWorld {
         const enemy = this.enemies[enemyIndex];
         if (!this.isEnemyWithinRadius(enemy, shell.target, shell.radius)) continue;
         this.applyDamage(enemy, shell.damage, "mortar");
-        if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
       shell.mesh.dispose();
       this.arcShells.splice(index, 1);
@@ -1604,8 +2015,7 @@ export class GameWorld {
       if (distance > this.getEnemyHitRadius(shell.target) + 0.68) continue;
       const hitPosition = shell.target.mesh.position.clone();
       this.applyDamage(shell.target, shell.damage, "split");
-      const targetIndex = this.enemies.indexOf(shell.target);
-      if (shell.target.hp <= 0 && targetIndex >= 0) this.destroyEnemy(targetIndex);
+      if (shell.target.hp <= 0) this.destroyEnemy(shell.target);
       const targets = [...this.enemies]
         .filter((enemy) => this.isCombatTarget(enemy) && enemy !== shell.target)
         .sort((left, right) => Vector3.DistanceSquared(left.mesh.position, hitPosition) - Vector3.DistanceSquared(right.mesh.position, hitPosition))
@@ -1621,7 +2031,7 @@ export class GameWorld {
   }
 
   private throwReturnBlade() {
-    const target = this.getNearestTarget(this.player.position);
+    const target = this.getFarthestTarget(this.player.position);
     if (!target) return;
     const direction = target.mesh.position.subtract(this.player.position);
     direction.y = 0;
@@ -1661,13 +2071,13 @@ export class GameWorld {
         if (!this.isCombatTarget(enemy) || blade.hitTargets.has(enemy.mesh) || !this.isEnemyWithinRadius(enemy, blade.mesh.position, Math.sqrt(1.25))) continue;
         blade.hitTargets.add(enemy.mesh);
         this.applyDamage(enemy, blade.damage, "boomerang");
-        if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
     }
   }
 
   private fireIonLance() {
-    const target = this.getNearestTarget(this.player.position);
+    const target = this.getHighestHealthTarget(this.player.position);
     if (!target) return;
     const tier = this.moduleTiers.laser;
     const start = this.player.position.add(new Vector3(0, 1.04, 0));
@@ -1681,7 +2091,7 @@ export class GameWorld {
         const enemy = this.enemies[enemyIndex];
         if (!this.isCombatTarget(enemy) || !this.isEnemyHitByTrace(enemy, start, end, width)) continue;
       this.applyDamage(enemy, 15 + tier * 11, "laser");
-      if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+      if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
   }
 
@@ -1696,9 +2106,8 @@ export class GameWorld {
       this.createEnergyTrace(origin, target.mesh.position, 0.08 + tier * 0.025, this.gemMaterial, 0.12);
       this.applyDamage(target, 9 + tier * 7, "chain");
       visited.add(target.mesh);
-      const targetIndex = this.enemies.indexOf(target);
       const impact = target.mesh.position.clone();
-      if (target.hp <= 0 && targetIndex >= 0) this.destroyEnemy(targetIndex);
+      if (target.hp <= 0) this.destroyEnemy(target);
       origin = impact;
       target = this.getNearestUnlinkedTarget(origin, visited, 8.5 + tier * 1.1);
     }
@@ -1715,16 +2124,17 @@ export class GameWorld {
     return target;
   }
 
-  private deployMine() {
+  private deployMine(position?: Vector3) {
     const tier = this.moduleTiers.mine;
     if (tier <= 0) return;
     while (this.mines.length >= tier) {
       const oldest = this.mines.shift();
       if (oldest) this.detonateMine(oldest, 0.72);
     }
-    const angle = this.elapsed * 2.3 + this.mines.length * 2.1;
     const mine = MeshBuilder.CreateCylinder("prox-mine", { height: 0.26, diameterTop: 0.45, diameterBottom: 0.64, tessellation: 8 }, this.scene);
-    mine.position.copyFrom(this.player.position.add(new Vector3(Math.cos(angle) * 1.5, 0.18, Math.sin(angle) * 1.5)));
+    const trail = this.lastMoveDirection.scale(-1.35 - this.mines.length * 0.35);
+    mine.position.copyFrom(position ? position.clone() : this.player.position.add(trail));
+    mine.position.y = 0.18;
     mine.material = this.recoveryMaterial;
     this.mines.push({ mesh: mine, life: 9 + tier * 1.8, armed: 0.55 });
   }
@@ -1756,7 +2166,7 @@ export class GameWorld {
         const enemy = this.enemies[enemyIndex];
         if (!this.isEnemyWithinRadius(enemy, mine.mesh.position, blastRadius)) continue;
         this.applyDamage(enemy, (30 + tier * 18) * damageScale, "mine");
-        if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
       if (tier >= 3 && damageScale >= 1) {
         for (const chainedMine of this.mines) {
@@ -1814,13 +2224,13 @@ export class GameWorld {
         const enemy = this.enemies[enemyIndex];
         if (!this.isCombatTarget(enemy) || !this.isEnemyHitByTrace(enemy, start, end, width)) continue;
         this.applyDamage(enemy, 7 + tier * 5, "fan");
-        if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
     }
   }
 
   private deploySkyfallMarker() {
-    const target = this.getNearestTarget(this.player.position);
+    const target = this.getDensestTarget(this.player.position);
     if (!target) return;
     const tier = this.moduleTiers.skyfall;
     const strikeCount = tier;
@@ -1856,7 +2266,7 @@ export class GameWorld {
         const enemy = this.enemies[enemyIndex];
         if (!this.isEnemyWithinRadius(enemy, strike.target, strike.radius)) continue;
         this.applyDamage(enemy, strike.damage, "skyfall");
-        if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
       strike.marker.dispose();
       this.skyfallStrikes.splice(index, 1);
@@ -1886,13 +2296,13 @@ export class GameWorld {
         const enemy = this.enemies[enemyIndex];
         if (!this.isCombatTarget(enemy) || !this.isEnemyHitByTrace(enemy, slashStart, slashEnd, hitWidth)) continue;
         this.applyDamage(enemy, 15 + tier * 10, "cleaver");
-        if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
     }
   }
 
   private fireNeedleRain() {
-    const target = this.getNearestTarget(this.player.position);
+    const target = this.getDensestTarget(this.player.position);
     if (!target) return;
     const tier = this.moduleTiers.needle;
     const needleCount = 4 + tier * 3;
@@ -1924,7 +2334,7 @@ export class GameWorld {
         const enemy = this.enemies[enemyIndex];
         if (!this.isEnemyWithinRadius(enemy, needle.target, hitRadius)) continue;
         this.applyDamage(enemy, needle.damage, "needle");
-        if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+        if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
       const impact = MeshBuilder.CreateTorus("needle-impact", { diameter: 0.32, thickness: 0.05, tessellation: 16 }, this.scene);
       impact.position.copyFrom(needle.target);
@@ -1949,9 +2359,18 @@ export class GameWorld {
     const tier = this.moduleTiers.saw;
     if (tier <= 0) return;
     this.ensureSawHalo();
+    const evolved = this.hasEvolution("nova-saw");
+    if (evolved) {
+      this.novaTimer -= delta;
+      if (this.novaTimer <= 0) {
+        this.triggerNovaRing(Math.max(tier, this.moduleTiers.nova));
+        this.novaTimer = 2.1;
+      }
+    }
     this.sawAngle += delta * (2.8 + tier * 0.7);
     const radius = 1.95 + tier * 0.22;
     this.sawBlades.forEach((blade, index) => {
+      blade.material = evolved ? this.magnetMaterial : this.recoveryMaterial;
       const angle = this.sawAngle + (Math.PI * 2 * index) / this.sawBlades.length;
       blade.position.copyFrom(this.player.position.add(new Vector3(Math.cos(angle) * radius, 0.85, Math.sin(angle) * radius)));
       blade.rotation.y = -angle;
@@ -1965,12 +2384,12 @@ export class GameWorld {
       const hit = this.sawBlades.some((blade) => this.isEnemyWithinRadius(enemy, blade.position, Math.sqrt(1.65)));
       if (!hit) continue;
       this.applyDamage(enemy, 4 + tier * 4, "saw");
-      if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+      if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
   }
 
   private fireChainHarpoon() {
-    const target = this.getNearestTarget(this.player.position);
+    const target = this.getHighestHealthTarget(this.player.position);
     if (!target) return;
     const tier = this.moduleTiers.harpoon;
     const harpoon = MeshBuilder.CreateCylinder("chain-harpoon", { height: 0.72, diameterTop: 0.08, diameterBottom: 0.22, tessellation: 6 }, this.scene);
@@ -2000,8 +2419,7 @@ export class GameWorld {
         if (distance <= this.getEnemyHitRadius(harpoon.target) + 0.78) {
           harpoon.latched = true;
           this.applyDamage(harpoon.target, harpoon.damage, "harpoon");
-          const targetIndex = this.enemies.indexOf(harpoon.target);
-          if (harpoon.target.hp <= 0 && targetIndex >= 0) this.destroyEnemy(targetIndex);
+          if (harpoon.target.hp <= 0) this.destroyEnemy(harpoon.target);
         }
       } else {
         harpoon.mesh.position.copyFrom(harpoon.target.mesh.position.add(new Vector3(0, 0.8, 0)));
@@ -2022,7 +2440,7 @@ export class GameWorld {
           const enemy = this.enemies[enemyIndex];
           if (!this.isEnemyWithinRadius(enemy, harpoon.target.mesh.position, Math.sqrt(8.4))) continue;
           this.applyDamage(enemy, Math.max(7, harpoon.damage * 0.55), "harpoon");
-          if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+          if (enemy.hp <= 0) this.destroyEnemy(enemy);
         }
       }
       harpoon.mesh.dispose();
@@ -2051,9 +2469,8 @@ export class GameWorld {
       this.createEnergyTrace(origin, target.mesh.position, 0.085 + tier * 0.024, this.recoveryMaterial, 0.13);
       this.applyDamage(target, 8 + tier * 7 + jump * 2, "thermal");
       visited.add(target.mesh);
-      const targetIndex = this.enemies.indexOf(target);
       const impact = target.mesh.position.clone();
-      if (target.hp <= 0 && targetIndex >= 0) this.destroyEnemy(targetIndex);
+      if (target.hp <= 0) this.destroyEnemy(target);
       origin = impact;
       target = this.getNearestUnlinkedTarget(origin, visited, 7.5 + tier * 1.25);
     }
@@ -2068,7 +2485,7 @@ export class GameWorld {
       const enemy = this.enemies[enemyIndex];
       if (!this.isEnemyWithinRadius(enemy, finalPoint, Math.sqrt(7.8))) continue;
       this.applyDamage(enemy, 10 + tier * 7, "thermal");
-      if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+      if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
   }
 
@@ -2101,7 +2518,7 @@ export class GameWorld {
       if (facing < threshold) continue;
         this.applyDamage(enemy, 18 + tier * 10, "sonic");
       enemy.mesh.position.addInPlace(offset.scale((0.8 + tier * 0.4) / distance));
-      if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+      if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
   }
 
@@ -2140,8 +2557,7 @@ export class GameWorld {
         .sort((left, right) => Vector3.DistanceSquared(left.mesh.position, impactPoint) - Vector3.DistanceSquared(right.mesh.position, impactPoint))
         .slice(0, core.fragments);
       this.applyDamage(core.target, core.damage, "cluster");
-      const targetIndex = this.enemies.indexOf(core.target);
-      if (core.target.hp <= 0 && targetIndex >= 0) this.destroyEnemy(targetIndex);
+      if (core.target.hp <= 0) this.destroyEnemy(core.target);
       for (const target of targets) {
         if (!this.enemies.includes(target)) continue;
         const shard = MeshBuilder.CreateSphere("cluster-shard", { diameter: 0.17, segments: 6 }, this.scene);
@@ -2179,8 +2595,7 @@ export class GameWorld {
       shard.mesh.rotation.y += delta * 14;
       if (distance > this.getEnemyHitRadius(shard.target) + 0.6) continue;
       this.applyDamage(shard.target, shard.damage, "cluster");
-      const targetIndex = this.enemies.indexOf(shard.target);
-      if (shard.target.hp <= 0 && targetIndex >= 0) this.destroyEnemy(targetIndex);
+      if (shard.target.hp <= 0) this.destroyEnemy(shard.target);
       shard.mesh.dispose();
       this.clusterShards.splice(index, 1);
     }
@@ -2210,7 +2625,7 @@ export class GameWorld {
   }
 
   private updateMirageDrones(delta: number) {
-    if (this.moduleTiers.mirage <= 0) return;
+    if (this.moduleTiers.mirage <= 0 || this.hasEvolution("mirage-pylon")) return;
     this.mirageAngle += delta * 2.4;
     this.mirageDrones.forEach((drone, index) => {
       const angle = this.mirageAngle + (Math.PI * 2 * index) / this.mirageDrones.length;
@@ -2231,7 +2646,8 @@ export class GameWorld {
   }
 
   private deployPylon() {
-    const allowed = this.moduleTiers.pylon;
+    const evolved = this.hasEvolution("mirage-pylon");
+    const allowed = evolved ? Math.min(3, Math.max(this.moduleTiers.pylon, this.moduleTiers.mirage)) : this.moduleTiers.pylon;
     if (allowed <= 0) return;
     while (this.pylons.length >= allowed) {
       const oldest = this.pylons.shift();
@@ -2270,6 +2686,7 @@ export class GameWorld {
   }
 
   private updatePylons(delta: number) {
+    const evolved = this.hasEvolution("mirage-pylon");
     for (let index = this.pylons.length - 1; index >= 0; index -= 1) {
       const pylon = this.pylons[index];
       pylon.life -= delta;
@@ -2289,8 +2706,8 @@ export class GameWorld {
       direction.y = 0;
       direction.normalize();
       this.createEnergyTrace(pylon.mesh.position.add(new Vector3(0, 0.72, 0)), target.mesh.position, 0.035 + this.moduleTiers.pylon * 0.008, this.magnetMaterial, 0.1);
-      this.spawnBoltFrom(pylon.mesh.position, direction, 19, 9 + this.moduleTiers.pylon * 6, 0.18, "pylon");
-      pylon.cooldown = Math.max(0.45, 1.12 - this.moduleTiers.pylon * 0.16);
+      this.spawnBoltFrom(pylon.mesh.position, direction, evolved ? 24 : 19, 9 + this.moduleTiers.pylon * 6 + (evolved ? this.moduleTiers.mirage * 7 : 0), evolved ? 0.23 : 0.18, "pylon");
+      pylon.cooldown = evolved ? 0.38 : Math.max(0.45, 1.12 - this.moduleTiers.pylon * 0.16);
     }
   }
 
@@ -2368,7 +2785,7 @@ export class GameWorld {
       const enemy = this.enemies[index];
       if (!this.isEnemyWithinRadius(enemy, this.player.position, radius)) continue;
       this.applyDamage(enemy, 12 + tier * 10, "reactive");
-      if (enemy.hp <= 0) this.destroyEnemy(index);
+      if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
   }
 
@@ -2398,6 +2815,50 @@ export class GameWorld {
     return target;
   }
 
+  private getHighestHealthTarget(origin: Vector3, maxDistance = this.getTargetingRadius()) {
+    let target: Enemy | undefined;
+    let highestScore = -1;
+    for (const enemy of this.enemies) {
+      if (!this.isCombatTarget(enemy)) continue;
+      const distance = Vector3.DistanceSquared(enemy.mesh.position, origin);
+      const effectiveRange = maxDistance + this.getEnemyHitRadius(enemy);
+      if (distance > effectiveRange * effectiveRange) continue;
+      const priority = (enemy.milestoneBoss ? 1_000_000 : 0) + enemy.hp;
+      if (priority > highestScore) { highestScore = priority; target = enemy; }
+    }
+    if (target) target.lastTargetedAt = this.elapsed;
+    return target;
+  }
+
+  private getFarthestTarget(origin: Vector3, maxDistance = this.getTargetingRadius()) {
+    let target: Enemy | undefined;
+    let farthest = -1;
+    for (const enemy of this.enemies) {
+      if (!this.isCombatTarget(enemy)) continue;
+      const distance = Vector3.DistanceSquared(enemy.mesh.position, origin);
+      const effectiveRange = maxDistance + this.getEnemyHitRadius(enemy);
+      if (distance <= effectiveRange * effectiveRange && distance > farthest) { farthest = distance; target = enemy; }
+    }
+    if (target) target.lastTargetedAt = this.elapsed;
+    return target;
+  }
+
+  private getDensestTarget(origin: Vector3, maxDistance = this.getTargetingRadius()) {
+    const candidates = this.enemies.filter((enemy) => this.isCombatTarget(enemy) && Vector3.DistanceSquared(enemy.mesh.position, origin) <= maxDistance * maxDistance);
+    if (candidates.length === 0) return undefined;
+    const stride = Math.max(1, Math.ceil(candidates.length / 12));
+    let target = candidates[0];
+    let bestDensity = -1;
+    for (let index = 0; index < candidates.length; index += stride) {
+      const candidate = candidates[index];
+      let density = 0;
+      for (const other of candidates) if (Vector3.DistanceSquared(candidate.mesh.position, other.mesh.position) <= 5.5 * 5.5) density += 1;
+      if (density > bestDensity) { bestDensity = density; target = candidate; }
+    }
+    target.lastTargetedAt = this.elapsed;
+    return target;
+  }
+
   private spawnBoltFrom(origin: Vector3, direction: Vector3, speed: number, damage: number, diameter: number, source: AttackId) {
     const bolt = MeshBuilder.CreateSphere("module-bolt", { diameter, segments: 6 }, this.scene);
     bolt.position = origin.add(direction.scale(0.55));
@@ -2408,13 +2869,27 @@ export class GameWorld {
   }
 
   private applyDamage(enemy: Enemy, damage: number, source: AttackId, skipCorrosion = false) {
-    if (!this.isCombatTarget(enemy) || damage <= 0) return;
+    if (!this.isSimulationActive() || enemy.hp <= 0 || !this.enemies.includes(enemy) || !this.isCombatTarget(enemy) || damage <= 0) return;
     if (this.debugMode) this.debugHits += 1;
-    const actualDamage = Math.max(0, Math.min(enemy.hp, damage));
+    const boost = this.dodgeBoostSeconds > 0 ? 1.15 : 1;
+    const vulnerability = enemy.vulnerableTime > 0 ? 1.35 : 1;
+    const amplifiedDamage = damage * this.attackAmplifier * boost * vulnerability;
+    const actualDamage = Math.max(0, Math.min(enemy.hp, amplifiedDamage));
+    const bossHealthStepBefore = enemy.milestoneBoss ? Math.floor((1 - enemy.hp / Math.max(1, enemy.maxHp)) * 10) : 0;
     this.recordDamage(source, actualDamage);
     enemy.lastDamagedBy = source;
-    enemy.hp -= damage;
+    enemy.hp -= amplifiedDamage;
+    if (enemy.milestoneBoss) {
+      const bossHealthStepAfter = Math.min(10, Math.floor((1 - Math.max(0, enemy.hp) / Math.max(1, enemy.maxHp)) * 10));
+      const crossedSteps = Math.max(0, bossHealthStepAfter - bossHealthStepBefore);
+      if (crossedSteps > 0) {
+        this.combo += crossedSteps * 5;
+        this.comboTimer = COMBO_WINDOW_SECONDS;
+        this.maxCombo = Math.max(this.maxCombo, this.combo);
+      }
+    }
     if (!skipCorrosion && this.moduleTiers.corrosion > 0) this.applyCorrosion(enemy);
+    if (!this.enemies.includes(enemy)) return;
     if (this.moduleTiers.cryo > 0) enemy.cryoTime = Math.max(enemy.cryoTime, 0.75 + this.moduleTiers.cryo * 0.42);
     if (enemy.healthFill) {
       const ratio = Math.max(0, enemy.hp / enemy.maxHp);
@@ -2462,7 +2937,7 @@ export class GameWorld {
       if (enemy.corrosionTick > 0) continue;
       enemy.corrosionTick = Math.max(0.28, 0.72 - this.moduleTiers.corrosion * 0.08);
       this.applyDamage(enemy, 2 + this.moduleTiers.corrosion * 2.3 + enemy.corrosionStacks * 1.4, "corrosion", true);
-      if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+      if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
   }
 
@@ -2480,7 +2955,7 @@ export class GameWorld {
       if (!this.isEnemyWithinRadius(enemy, origin, radius)) continue;
       this.applyDamage(enemy, 6 + tier * 6, "corrosion", true);
       enemy.corrosionTime = Math.max(enemy.corrosionTime, 0.9 + tier * 0.3);
-      if (enemy.hp <= 0) this.destroyEnemy(enemyIndex);
+      if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
   }
 
@@ -2526,7 +3001,7 @@ export class GameWorld {
       this.applyDamage(enemy, 10 + this.orbitTier * 6, "orbit");
       enemy.orbitCooldown = 0.34;
       enemy.hitFlash = 0.12;
-      if (enemy.hp <= 0) this.destroyEnemy(index);
+      if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
   }
 
@@ -2548,17 +3023,36 @@ export class GameWorld {
 
   private removeDefeatedEnemies() {
     for (let index = this.enemies.length - 1; index >= 0; index -= 1) {
-      if (this.enemies[index].hp <= 0) this.destroyEnemy(index);
+      const enemy = this.enemies[index];
+      if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
   }
 
   private updateEnemies(delta: number) {
     this.damageTimer -= delta;
     this.removeDefeatedEnemies();
+    if (!this.isSimulationActive()) return;
     for (const enemy of this.enemies) {
       enemy.cryoTime = Math.max(0, enemy.cryoTime - delta);
+      enemy.vulnerableTime = Math.max(0, enemy.vulnerableTime - delta);
       if (enemy.enteringContainment) {
         this.updateEnemyIngress(enemy, delta);
+        continue;
+      }
+      if ((enemy.missionBossStage === 1 || enemy.missionBossStage === 2) && !enemy.bossEnraged && enemy.hp / enemy.maxHp <= 0.52) {
+        enemy.bossEnraged = true;
+        enemy.summonTimer = Math.min(enemy.summonTimer, 1.2);
+        enemy.strikerCooldown = Math.min(enemy.strikerCooldown, 0.8);
+        const phaseWave = MeshBuilder.CreateTorus("mission-boss-phase", { diameter: 0.9, thickness: 0.13, tessellation: 30 }, this.scene);
+        phaseWave.position.copyFrom(enemy.mesh.position);
+        phaseWave.position.y = 0.2;
+        phaseWave.material = this.enemyThreatMaterial;
+        this.shockwaves.push({ mesh: phaseWave, life: 0.58, maxLife: 0.58 });
+      }
+      if (enemy.missionBossStage === 1) this.updateCarrierBoss(enemy, delta);
+      if (enemy.vulnerableTime > 0) {
+        enemy.mesh.rotation.y += delta * 2;
+        enemy.mesh.scaling.setAll(enemy.scale * (1 + Math.sin(this.elapsed * 18) * 0.08));
         continue;
       }
       const decoy = this.getDecoyTarget(enemy);
@@ -2595,9 +3089,33 @@ export class GameWorld {
       const enemyContactRadius = this.getEnemyHitRadius(enemy);
       if (!decoy && distance < PLAYER_RING_RADIUS + enemyContactRadius && this.damageTimer <= 0) {
         this.damagePlayer(Math.min(9, enemy.contactDamage + Math.floor(this.elapsed / 70)), 0.6, "contact");
-        if (this.phase === "gameover") return;
+        if (!this.isSimulationActive()) return;
       }
     }
+  }
+
+  private updateCarrierBoss(enemy: Enemy, delta: number) {
+    enemy.summonTimer -= delta;
+    if (enemy.summonTimer > 0) return;
+    enemy.summonTimer = enemy.bossEnraged ? 3.8 : 5.4;
+    const liveAdds = this.enemies.filter((candidate) => !candidate.milestoneBoss).length;
+    const addCount = Math.max(0, Math.min(enemy.bossEnraged ? 4 : 3, 7 - liveAdds));
+    for (let index = 0; index < addCount; index += 1) {
+      this.spawnEnemy(index === 2 ? "striker" : "scout", undefined, false);
+      const add = this.enemies[this.enemies.length - 1];
+      const angle = (index / Math.max(1, addCount)) * Math.PI * 2 + this.elapsed;
+      add.mesh.position.copyFrom(enemy.mesh.position.add(new Vector3(Math.cos(angle) * 2.4, 0, Math.sin(angle) * 2.4)));
+      add.mesh.position.y = 0.8;
+      add.enteringContainment = false;
+      add.hp = Math.max(8, Math.ceil(add.hp * 0.72));
+      add.maxHp = add.hp;
+    }
+    const wave = MeshBuilder.CreateTorus("carrier-summon-warning", { diameter: 2.2, thickness: 0.11, tessellation: 28 }, this.scene);
+    wave.position.copyFrom(enemy.mesh.position);
+    wave.position.y = 0.18;
+    wave.material = this.enemyThreatMaterial;
+    this.shockwaves.push({ mesh: wave, life: 0.52, maxLife: 0.52 });
+    enemy.vulnerableTime = Math.max(enemy.vulnerableTime, enemy.bossEnraged ? 1.25 : 1.65);
   }
 
   private updateHighVariantAction(enemy: Enemy, canThreatenPlayer: boolean, delta: number) {
@@ -2648,7 +3166,7 @@ export class GameWorld {
       if (distance < 3.4 || distance > 9.6) return false;
       vector.scaleInPlace(1 / distance);
       enemy.strikerAction = "windup";
-      enemy.strikerTimer = 0.42;
+      enemy.strikerTimer = enemy.milestoneBoss ? (enemy.bossEnraged ? 0.72 : 0.85) : 0.42;
       enemy.strikerVector.copyFrom(vector);
       enemy.strikerDashHit = false;
       enemy.strikerMarker = this.createStrikerDashWarning(enemy.mesh.position, enemy.mesh.position.add(vector.scale(Math.min(6.2, distance - 0.4))));
@@ -2670,8 +3188,8 @@ export class GameWorld {
     enemy.mesh.rotation.y = Math.atan2(enemy.strikerVector.x, enemy.strikerVector.z);
     const strikerContactRadius = PLAYER_RING_RADIUS + this.getEnemyHitRadius(enemy);
     if (!enemy.strikerDashHit && Vector3.DistanceSquared(this.player.position, enemy.mesh.position) < strikerContactRadius * strikerContactRadius) {
-      enemy.strikerDashHit = true;
-      this.damagePlayer(8 + Math.floor(this.elapsed / 105), 0.45, "striker-dash");
+      const hitResult = this.damagePlayer(8 + Math.floor(this.elapsed / 105), 0.45, "striker-dash");
+      enemy.strikerDashHit = hitResult === "damaged";
     }
     if (enemy.strikerTimer > 0) return true;
     const dashWave = MeshBuilder.CreateTorus("striker-dash-end", { diameter: 0.4, thickness: 0.065, tessellation: 20 }, this.scene);
@@ -2680,11 +3198,13 @@ export class GameWorld {
     dashWave.material = this.enemyThreatMaterial;
     this.shockwaves.push({ mesh: dashWave, life: 0.2, maxLife: 0.2 });
     enemy.strikerAction = "none";
-    enemy.strikerCooldown = 3.1 + Math.random() * 1.3;
+    enemy.strikerCooldown = (enemy.bossEnraged ? 2.15 : 3.1) + Math.random() * 1.3;
+    if (enemy.milestoneBoss && !enemy.strikerDashHit) enemy.vulnerableTime = Math.max(enemy.vulnerableTime, 1.8);
     return true;
   }
 
   private createStrikerDashWarning(start: Vector3, end: Vector3) {
+    this.dangerSignal += 1;
     const direction = end.subtract(start);
     const length = direction.length();
     const marker = MeshBuilder.CreateBox("striker-dash-warning", { width: 0.12, height: 0.055, depth: Math.max(0.12, length) }, this.scene);
@@ -2710,7 +3230,7 @@ export class GameWorld {
     const roll = Math.random();
     if (enemy.bossEnraged && roll < 0.34) {
       enemy.bossAction = "barrage";
-      enemy.bossTimer = 0.72;
+      enemy.bossTimer = enemy.milestoneBoss ? 0.9 : 0.72;
       enemy.bossBursts = 3;
       enemy.bossTarget.copyFrom(this.player.position);
       enemy.bossMarker = this.createBossWarning(enemy.bossTarget, 1.85);
@@ -2718,13 +3238,13 @@ export class GameWorld {
     }
     if (distance < 4.9 && roll < 0.52) {
       enemy.bossAction = "shockwave";
-      enemy.bossTimer = 0.7;
+      enemy.bossTimer = enemy.milestoneBoss ? 0.85 : 0.7;
       enemy.bossMarker = this.createBossWarning(enemy.mesh.position, 3.8);
       return;
     }
     if (distance > 7.2 && roll < 0.68) {
       enemy.bossAction = "charge";
-      enemy.bossTimer = 0.64;
+      enemy.bossTimer = enemy.milestoneBoss ? 0.85 : 0.64;
       enemy.bossTarget.copyFrom(this.player.position);
       enemy.bossVector.copyFrom(enemy.bossTarget.subtract(enemy.mesh.position));
       enemy.bossVector.y = 0;
@@ -2734,7 +3254,7 @@ export class GameWorld {
       return;
     }
     enemy.bossAction = "artillery";
-    enemy.bossTimer = 0.95;
+    enemy.bossTimer = enemy.milestoneBoss ? 1.1 : 0.95;
     enemy.bossTarget.copyFrom(this.player.position);
     enemy.bossMarker = this.createBossWarning(enemy.bossTarget, 3.15);
   }
@@ -2767,7 +3287,7 @@ export class GameWorld {
       const offsetAngle = this.elapsed * 3.3 + enemy.bossBursts * 2.2;
       enemy.bossTarget.copyFrom(this.player.position.add(new Vector3(Math.cos(offsetAngle) * 0.9, 0, Math.sin(offsetAngle) * 0.9)));
       enemy.bossMarker = this.createBossWarning(enemy.bossTarget, radius);
-      enemy.bossTimer = 0.4;
+      enemy.bossTimer = enemy.milestoneBoss ? 0.55 : 0.4;
       return true;
     }
     if (enemy.bossAction === "shockwave") {
@@ -2826,6 +3346,7 @@ export class GameWorld {
   }
 
   private createBossWarning(position: Vector3, diameter: number) {
+    this.dangerSignal += 1;
     const marker = MeshBuilder.CreateTorus("bulwark-warning", { diameter, thickness: 0.1, tessellation: 28 }, this.scene);
     marker.position.copyFrom(position);
     marker.position.y = 0.14;
@@ -2839,22 +3360,95 @@ export class GameWorld {
     enemy.bossAction = "none";
     enemy.bossTimer = 0;
     enemy.bossCooldown = cooldown + Math.random() * 1.2;
+    if (enemy.milestoneBoss) enemy.vulnerableTime = Math.max(enemy.vulnerableTime, 1.35);
   }
 
-  private damagePlayer(amount: number, cooldown: number, source: PlayerDamageSource) {
-    if (this.damageTimer > 0 || this.phase !== "playing") return;
+  private hasImminentDodgeThreat(origin: Vector3) {
+    for (const enemy of this.enemies) {
+      if (!this.isInsideContainment(enemy)) continue;
+      const contactRadius = PLAYER_RING_RADIUS + this.getEnemyHitRadius(enemy) + 0.38;
+      const distanceSquared = Vector3.DistanceSquared(origin, enemy.mesh.position);
+      if (distanceSquared <= contactRadius * contactRadius) return true;
+
+      if (enemy.strikerAction === "dash" || (enemy.strikerAction === "windup" && enemy.strikerTimer <= DODGE_PERFECT_WINDOW_SECONDS)) {
+        const dashEnd = enemy.mesh.position.add(enemy.strikerVector.scale(8));
+        if (this.distanceToSegmentSquared(origin, enemy.mesh.position, dashEnd) <= contactRadius * contactRadius) return true;
+      }
+
+      if (enemy.bossAction !== "none" && enemy.bossTimer <= DODGE_PERFECT_WINDOW_SECONDS) {
+        if (enemy.bossAction === "shockwave" && distanceSquared <= 3.8 * 3.8) return true;
+        if (enemy.bossAction === "artillery" && Vector3.DistanceSquared(origin, enemy.bossTarget) <= 3.15 * 3.15) return true;
+        if (enemy.bossAction === "barrage" && Vector3.DistanceSquared(origin, enemy.bossTarget) <= 1.85 * 1.85) return true;
+        if (enemy.bossAction === "charge") {
+          const chargeEnd = enemy.bossTimer > 0 ? enemy.bossTarget : enemy.mesh.position.add(enemy.bossVector.scale(8));
+          if (this.distanceToSegmentSquared(origin, enemy.mesh.position, chargeEnd) <= contactRadius * contactRadius) return true;
+        }
+      }
+
+      if (enemy.highVariant && HIGH_VARIANTS[enemy.highVariant].trait === "pulse" && enemy.variantTimer <= DODGE_PERFECT_WINDOW_SECONDS) {
+        const pulseRadius = 3.2 + enemy.scale * 1.1;
+        if (distanceSquared <= pulseRadius * pulseRadius) return true;
+      }
+    }
+
+    return this.idleNeedles.some((needle) => needle.life <= DODGE_PERFECT_WINDOW_SECONDS && Vector3.DistanceSquared(origin, needle.target) <= 1.05 * 1.05);
+  }
+
+  private registerPerfectDodge() {
+    if (this.dodgePerfectRegistered) return;
+    this.dodgePerfectRegistered = true;
+    this.perfectDodges += 1;
+    this.score += PERFECT_DODGE_SCORE;
+    this.dodgeBoostSeconds = PERFECT_DODGE_BOOST_SECONDS;
+    const boss = this.enemies
+      .filter((enemy) => enemy.milestoneBoss)
+      .sort((left, right) => Vector3.DistanceSquared(left.mesh.position, this.player.position) - Vector3.DistanceSquared(right.mesh.position, this.player.position))[0];
+    if (boss) {
+      boss.vulnerableTime = Math.max(boss.vulnerableTime, 2.6);
+      boss.strikerAction = "none";
+      boss.strikerMarker?.dispose();
+      boss.strikerMarker = undefined;
+      this.finishBulwarkAction(boss, 2.8);
+    }
+    if (this.hasEvolution("nova-saw")) this.triggerNovaRing(Math.max(1, this.moduleTiers.nova));
+  }
+
+  private damagePlayer(amount: number, cooldown: number, source: PlayerDamageSource): PlayerDamageResult {
+    if (this.damageTimer > 0 || this.phase !== "playing") return "blocked";
+    if (this.dodgeInvulnerable > 0) {
+      if (!this.dodgePerfectRegistered) {
+        this.registerPerfectDodge();
+        this.emitSnapshot();
+      }
+      return "perfect";
+    }
     const reactiveMitigation = this.moduleTiers.reactive > 0 ? Math.min(0.36, this.moduleTiers.reactive * 0.12) : 0;
     const finalDamage = Math.max(1, Math.ceil(amount * (1 - reactiveMitigation)));
     this.health = Math.max(0, this.health - finalDamage);
     this.damageTimer = cooldown;
     this.lastDamageSource = source;
+    this.combo = 0;
+    this.comboTimer = 0;
     this.damageFlash = Math.max(this.damageFlash, 0.46);
-    if (this.moduleTiers.reactive > 0) this.triggerReactiveWave(this.moduleTiers.reactive);
-    if (this.health > 0) {
-      this.emitSnapshot();
-      return;
+    if (this.health <= 0) {
+      this.finishRun("failed", DEATH_CAUSE_LABELS[source]);
+      return "damaged";
     }
+    if (this.moduleTiers.reactive > 0) this.triggerReactiveWave(this.moduleTiers.reactive);
+    if (!this.isSimulationActive()) return "damaged";
+    this.emitSnapshot();
+    return "damaged";
+  }
+
+  private finishRun(outcome: Exclude<GameOutcome, "running">, cause: string) {
+    if (this.runFinalized) return;
+    this.runFinalized = true;
+    this.outcome = outcome;
+    this.deathCause = cause;
+    if (outcome === "clear") this.score += this.level * 100 + Math.max(0, Math.ceil(this.health)) * 10;
     this.phase = "gameover";
+    this.touchDirection.setAll(0);
+    this.keys.clear();
     this.emitSnapshot();
   }
 
@@ -2871,12 +3465,13 @@ export class GameWorld {
     this.playerHitRing.isVisible = Math.floor((0.46 - this.damageFlash) * 18) % 2 === 0;
   }
 
-  private destroyEnemy(index: number) {
-    const enemy = this.enemies[index];
-    if (!enemy || enemy.hp > 0) return;
+  private destroyEnemy(enemy: Enemy) {
+    const index = this.enemies.indexOf(enemy);
+    if (index < 0 || enemy.hp > 0 || this.phase !== "playing" || this.runFinalized) return false;
     const position = enemy.mesh.position.clone();
     const dropPosition = this.getRecoverableDropPosition(position);
     const milestoneBoss = Boolean(enemy.milestoneBoss);
+    const missionBossStage = enemy.missionBossStage;
     // 破棄中に被弾反撃・腐食連鎖が発生しても、同一敵を再度破棄しないよう先に管理配列から外す。
     this.enemies.splice(index, 1);
     enemy.corrosionMark?.dispose();
@@ -2886,9 +3481,16 @@ export class GameWorld {
     enemy.bossMarker?.dispose();
     enemy.mesh.dispose();
     this.kills += 1;
+    this.combo += 1;
+    this.comboTimer = COMBO_WINDOW_SECONDS;
+    this.maxCombo = Math.max(this.maxCombo, this.combo);
+    const scoreKind = missionBossStage === 3 ? "final" : milestoneBoss ? "midboss" : enemy.highVariant ? "variant" : enemy.kind;
+    const variantBaseXp = enemy.highVariant ? HIGH_VARIANTS[enemy.highVariant].xp : enemy.xpValue;
+    this.score += Math.round(scoreForEnemy(scoreKind, variantBaseXp) * getComboMultiplier(this.combo));
+    if (this.health / Math.max(1, this.maxHealth) <= 0.25) this.score += 200;
     if (enemy.lastDamagedBy) this.combatStats[enemy.lastDamagedBy].kills += 1;
     if (this.debugMode) this.debugKills += 1;
-    if (enemy.kind === "bulwark") {
+    if (enemy.kind === "bulwark" && !milestoneBoss) {
       const blastRadius = BULWARK_DESTRUCTION_BLAST_RADIUS;
       const explosion = MeshBuilder.CreateTorus("bulwark-destruction-blast", { diameter: blastRadius * 2, thickness: 0.12, tessellation: 36 }, this.scene);
       explosion.position.copyFrom(position);
@@ -2899,31 +3501,42 @@ export class GameWorld {
       const dz = this.player.position.z - position.z;
       const playerInsideBlast = dx * dx + dz * dz <= blastRadius * blastRadius;
       if (playerInsideBlast) this.damagePlayer(10, 0.42, "bulwark-destruction");
+      if (this.phase !== "playing") return true;
     }
-    const gem = MeshBuilder.CreateCylinder("energy-shard", { height: 0.42, diameterTop: 0.08, diameterBottom: 0.4, tessellation: 6 }, this.scene);
-    gem.position = new Vector3(dropPosition.x, 0.33, dropPosition.z);
-    gem.rotation.x = Math.PI;
-    gem.material = this.gemMaterial;
-    this.gems.push({ mesh: gem, value: enemy.xpValue });
+    if (this.gems.length >= MAX_GEM_MESHES) {
+      this.gems[0].value += enemy.xpValue;
+    } else {
+      const gem = MeshBuilder.CreateCylinder("energy-shard", { height: 0.42, diameterTop: 0.08, diameterBottom: 0.4, tessellation: 6 }, this.scene);
+      gem.position = new Vector3(dropPosition.x, 0.33, dropPosition.z);
+      gem.rotation.x = Math.PI;
+      gem.material = this.gemMaterial;
+      this.gems.push({ mesh: gem, value: enemy.xpValue });
+    }
     const shouldDropRecovery = this.health < this.maxHealth && Math.random() < this.getRecoveryDropChance();
     if (shouldDropRecovery) this.createRecoveryItem(dropPosition);
     const shouldDropMagnet = Math.random() < this.getMagnetDropChance();
     if (shouldDropMagnet) this.createMagnetItem(this.getRecoverableDropPosition(dropPosition.add(new Vector3(0.5, 0, -0.5))));
-    if (milestoneBoss) this.grantMilestoneBossReward(position);
+    if (milestoneBoss) {
+      this.bossesDefeated += 1;
+      this.activeMissionBossStage = 0;
+      if (missionBossStage === 3) {
+        this.score += scoreForClear();
+        this.finishRun("clear", `最終ボス「${NORMAL_BOSS_LABELS[3]}」を撃破`);
+      } else {
+        this.grantMilestoneBossReward(position);
+      }
+    }
+    return true;
   }
 
   private grantMilestoneBossReward(position: Vector3) {
-    this.maxHealth = Math.min(PLAYER_MAX_HEALTH_CAP, this.maxHealth + 3);
-    this.health = this.maxHealth;
-    this.level += 1;
-    this.xpNeeded = this.getExperienceNeeded(this.level);
     const reward = MeshBuilder.CreateTorus("milestone-boss-reward", { diameter: 2.85, thickness: 0.14, tessellation: 32 }, this.scene);
     reward.position.copyFrom(position);
     reward.position.y = 0.2;
     reward.material = this.magnetMaterial;
     this.shockwaves.push({ mesh: reward, life: 0.68, maxLife: 0.68 });
-    this.phase = "upgrade";
-    this.prepareUpgradeChoices();
+    this.pendingEvolution = this.getEligibleEvolution()?.id;
+    this.phase = "bossReward";
     this.emitSnapshot();
   }
 
@@ -3009,6 +3622,7 @@ export class GameWorld {
         this.magnetItems.splice(i, 1);
         this.collectAllExperience();
         this.emitSnapshot();
+        if (this.phase !== "playing") return;
       }
     }
   }
@@ -3024,11 +3638,13 @@ export class GameWorld {
   }
 
   private addExperience(amount: number) {
+    if (this.phase !== "playing" || amount <= 0) return;
     this.xp += amount;
     this.tryAdvanceLevel();
   }
 
   private tryAdvanceLevel() {
+    if (this.phase !== "playing") return false;
     if (this.xp < this.xpNeeded) return false;
     this.xp -= this.xpNeeded;
     this.level += 1;
@@ -3096,26 +3712,82 @@ export class GameWorld {
     ];
     for (const option of MODULE_UPGRADES) {
       if (!this.isModuleId(option.id) || this.moduleTiers[option.id] === 0) continue;
-      attacks.push({ id: option.id, label: option.title, detail: "戦術モジュール", iconId: option.iconId, tier: this.moduleTiers[option.id], active: true });
+      const moduleId = option.id;
+      const evolution = EVOLUTION_RECIPES.find((recipe) => this.evolvedWeapons.has(recipe.id) && recipe.modules.includes(moduleId));
+      if (evolution && EVOLUTION_REPRESENTATIVES[evolution.id] !== moduleId) continue;
+      attacks.push({
+        id: moduleId,
+        label: evolution?.name ?? option.title,
+        detail: evolution ? "進化統合武器" : "戦術モジュール",
+        iconId: option.iconId,
+        tier: this.moduleTiers[moduleId],
+        active: true,
+      });
     }
     const resultStats = attacks
       .filter((attack) => attack.active)
-      .map((attack) => ({ ...attack, ...this.combatStats[attack.id] }))
+      .map((attack) => {
+        const evolution = EVOLUTION_RECIPES.find((recipe) => this.evolvedWeapons.has(recipe.id) && EVOLUTION_REPRESENTATIVES[recipe.id] === attack.id);
+        const stat = evolution
+          ? evolution.modules.reduce((total, moduleId) => ({ damage: total.damage + this.combatStats[moduleId].damage, kills: total.kills + this.combatStats[moduleId].kills }), { damage: 0, kills: 0 })
+          : this.combatStats[attack.id];
+        return { ...attack, ...stat };
+      })
       .sort((left, right) => right.damage - left.damage || right.kills - left.kills);
     const totalDamage = Object.values(this.combatStats).reduce((total, stat) => total + stat.damage, 0);
+    const activeBossLabel = this.activeMissionBossStage > 0
+      ? NORMAL_BOSS_LABELS[this.activeMissionBossStage]
+      : this.enemies.some((enemy) => enemy.milestoneBoss)
+        ? "限界個体"
+        : undefined;
+    const nextBossSeconds = this.mode === "normal" && !activeBossLabel
+      ? getSecondsUntilNextNormalBoss(this.elapsed)
+      : undefined;
+    const objectiveText = activeBossLabel
+      ? this.activeMissionBossStage === 1
+        ? "増援を呼ぶ侵入母艦を撃破せよ"
+        : this.activeMissionBossStage === 2
+          ? "突進を完全回避し、停止した機体へ集中攻撃"
+          : this.activeMissionBossStage === 3
+            ? "予告攻撃後の弱点露出を狙い、最終ボスを撃破"
+            : "限界個体を撃破し、報酬を選択せよ"
+      : this.mode === "normal"
+        ? `${this.activeEncounterLabel} // ${Math.max(0, NORMAL_TARGET_SECONDS - Math.floor(this.elapsed))}秒後の作戦完了を目指す`
+        : `${this.activeEncounterLabel} // 限界まで成長し、自己最高スコアを更新`;
     this.onSnapshot({
       phase: this.phase,
+      mode: this.mode,
+      outcome: this.outcome,
+      score: Math.round(this.score),
+      combo: this.combo,
+      comboMultiplier: getComboMultiplier(this.combo),
+      maxCombo: this.maxCombo,
+      bossesDefeated: this.bossesDefeated,
+      perfectDodges: this.perfectDodges,
+      dodgeCooldown: this.dodgeCooldown,
+      dodgeCooldownMax: DODGE_COOLDOWN_SECONDS,
+      dodgeBoostSeconds: this.dodgeBoostSeconds,
+      missionLabel: this.mode === "normal" ? "通常作戦 // 目標 10:00" : "無限戦線 // HIGH SCORE",
+      objectiveText,
+      nextBossSeconds,
+      activeBossLabel,
+      deathCause: this.deathCause,
+      evolvedWeapons: Array.from(this.evolvedWeapons),
+      bossRewards: this.getBossRewardOptions(),
       health: this.health,
       maxHealth: this.maxHealth,
       damageFlash: this.damageFlash,
+      dangerSignal: this.dangerSignal,
       xp: this.xp,
       xpNeeded: this.xpNeeded,
       level: this.level,
       kills: this.kills,
       seconds: Math.floor(this.elapsed),
       weaponTier: this.weaponTier,
-      weaponCount: this.getAdditionalWeaponCount(),
+      weaponCount: this.getAttackSlotCount(),
       weaponLimit: this.getWeaponLimit(),
+      utilityCount: this.getUtilityCount(),
+      utilityLimit: UTILITY_SLOT_LIMIT,
       rerollsRemaining: this.rerollsRemaining,
       enemyCount: this.enemies.length,
       moduleMilestone: this.isModuleMilestone(),
@@ -3135,13 +3807,18 @@ export class GameWorld {
     }
     const pool = this.getUpgradeCandidatePool();
     const freshPool = pool.filter((option) => !excludedIds.has(option.id));
-    this.upgradeOptions = this.pickRandomOptions(freshPool.length >= 3 ? freshPool : pool, 3);
+    this.upgradeOptions = this.pickWeightedOptions(freshPool.length >= 3 ? freshPool : pool, 3);
   }
 
   private getUpgradeCandidatePool() {
     const catalog = this.level >= 10 ? UPGRADE_CATALOG : STANDARD_UPGRADES;
-    if (this.level >= 30) return catalog.filter((option) => this.canOfferExistingUpgrade(option));
-    return catalog.filter((option) => this.canOfferUpgrade(option));
+    const candidates = catalog.filter((option) => this.canOfferUpgrade(option));
+    if (candidates.length >= 3) return candidates;
+    // These three upgrades intentionally become uncapped mastery choices after
+    // their normal tiers, so an exhaustive Endless build can never softlock.
+    const masteryFallback = STANDARD_UPGRADES.filter((option) => option.id === "pulse" || option.id === "relay" || option.id === "barrier")
+      .filter((option) => !candidates.some((candidate) => candidate.id === option.id));
+    return [...candidates, ...masteryFallback];
   }
 
   private pickModuleMilestoneOptions(excludedIds: Set<UpgradeId>) {
@@ -3149,14 +3826,18 @@ export class GameWorld {
     const weaponPool = modulePool.filter((option) => this.isModuleId(option.id) && this.isWeaponModule(option.id));
     const freshWeaponPool = weaponPool.filter((option) => !excludedIds.has(option.id));
     const candidates = freshWeaponPool.length >= 3 ? freshWeaponPool : weaponPool;
-    const selected = this.pickRandomOptions(candidates, 3);
+    const selected = this.pickWeightedOptions(candidates, 3);
     if (selected.length < 3) {
       const supportPool = modulePool.filter((option) => !selected.some((picked) => picked.id === option.id));
-      selected.push(...this.pickRandomOptions(supportPool, 3 - selected.length));
+      selected.push(...this.pickWeightedOptions(supportPool, 3 - selected.length));
     }
     if (selected.length >= 3) return selected;
     const existingPool = this.getExistingUpgradePool().filter((option) => !selected.some((picked) => picked.id === option.id));
-    selected.push(...this.pickRandomOptions(existingPool, 3 - selected.length));
+    selected.push(...this.pickWeightedOptions(existingPool, 3 - selected.length));
+    if (selected.length < 3) {
+      const masteryFallback = STANDARD_UPGRADES.filter((option) => (option.id === "pulse" || option.id === "relay" || option.id === "barrier") && !selected.some((picked) => picked.id === option.id));
+      selected.push(...this.pickWeightedOptions(masteryFallback, 3 - selected.length));
+    }
     return selected;
   }
 
@@ -3177,41 +3858,75 @@ export class GameWorld {
     if (this.isModuleId(id)) {
       const tier = this.moduleTiers[id];
       if (tier >= 3) return false;
-      return tier > 0 || !this.isWeaponModule(id) || this.getAdditionalWeaponCount() < this.getWeaponLimit();
+      if (tier > 0) return true;
+      if (this.isWeaponModule(id)) return this.getAttackSlotCount() < this.getWeaponLimit();
+      return this.getUtilityCount() < UTILITY_SLOT_LIMIT;
     }
-    if (id === "scatter") return this.hasScatter || this.getAdditionalWeaponCount() < this.getWeaponLimit();
-    if (id === "orbit") return this.hasOrbit || this.getAdditionalWeaponCount() < this.getWeaponLimit();
-    return true;
+    if (id === "pulse") return this.weaponTier < 3;
+    if (id === "scatter") return this.hasScatter ? this.scatterTier < 3 : this.getAttackSlotCount() < this.getWeaponLimit();
+    if (id === "orbit") return this.hasOrbit ? this.orbitTier < 3 : this.getAttackSlotCount() < this.getWeaponLimit();
+    if (id === "relay") return this.relayTier > 0 ? this.relayTier < 4 : this.getUtilityCount() < UTILITY_SLOT_LIMIT;
+    if (id === "barrier") return this.barrierTier > 0 ? this.barrierTier < 4 : this.getUtilityCount() < UTILITY_SLOT_LIMIT;
+    return false;
   }
 
   private isWeaponModule(id: ModuleId) {
     return id !== "reactive" && id !== "cryo" && id !== "corrosion";
   }
 
-  private getAdditionalWeaponCount() {
-    let count = (this.hasScatter ? 1 : 0) + (this.hasOrbit ? 1 : 0);
+  private getAttackSlotCount() {
+    let count = 1 + (this.hasScatter ? 1 : 0) + (this.hasOrbit ? 1 : 0);
     for (const option of MODULE_UPGRADES) {
       if (this.isModuleId(option.id) && this.isWeaponModule(option.id) && this.moduleTiers[option.id] > 0) count += 1;
+    }
+    return Math.max(1, count - this.evolvedWeapons.size);
+  }
+
+  private getUtilityCount() {
+    let count = (this.relayTier > 0 ? 1 : 0) + (this.barrierTier > 0 ? 1 : 0);
+    for (const option of MODULE_UPGRADES) {
+      if (this.isModuleId(option.id) && !this.isWeaponModule(option.id) && this.moduleTiers[option.id] > 0) count += 1;
     }
     return count;
   }
 
   private getWeaponLimit() {
-    if (this.level < MODULE_MILESTONE_START_LEVEL) return 5;
-    return 6 + Math.floor((this.level - MODULE_MILESTONE_START_LEVEL) / MODULE_MILESTONE_INTERVAL);
+    return ATTACK_SLOT_LIMIT;
   }
 
   private isModuleMilestone() {
     return this.level >= MODULE_MILESTONE_START_LEVEL && (this.level - MODULE_MILESTONE_START_LEVEL) % MODULE_MILESTONE_INTERVAL === 0;
   }
 
-  private pickRandomOptions(options: UpgradeOption[], count: number) {
+  private pickWeightedOptions(options: UpgradeOption[], count: number) {
     const pool = [...options];
-    for (let index = pool.length - 1; index > 0; index -= 1) {
-      const picked = Math.floor(Math.random() * (index + 1));
-      [pool[index], pool[picked]] = [pool[picked], pool[index]];
+    const selected: UpgradeOption[] = [];
+    while (pool.length > 0 && selected.length < count) {
+      const weights = pool.map((option) => this.getUpgradeChoiceWeight(option));
+      const totalWeight = weights.reduce((total, weight) => total + weight, 0);
+      let roll = Math.random() * totalWeight;
+      let pickedIndex = 0;
+      for (let index = 0; index < pool.length; index += 1) {
+        roll -= weights[index];
+        if (roll <= 0) {
+          pickedIndex = index;
+          break;
+        }
+      }
+      selected.push(pool[pickedIndex]);
+      pool.splice(pickedIndex, 1);
     }
-    return pool.slice(0, Math.min(count, pool.length));
+    return selected;
+  }
+
+  private getUpgradeChoiceWeight(option: UpgradeOption) {
+    if (!this.isModuleId(option.id)) return 1;
+    const moduleId = option.id;
+    const recipe = EVOLUTION_RECIPES.find((candidate) => candidate.modules.includes(moduleId));
+    const partner = recipe?.modules.find((candidateId) => candidateId !== moduleId);
+    if (partner && this.moduleTiers[partner] > 0 && this.moduleTiers[moduleId] === 0) return 3;
+    if (this.moduleTiers[moduleId] > 0) return 1.65;
+    return 1;
   }
 
   private isModuleId(id: UpgradeId): id is ModuleId {
@@ -3219,6 +3934,77 @@ export class GameWorld {
   }
 
   private getUpgradeOptions() {
-    return this.upgradeOptions.length > 0 ? this.upgradeOptions : this.pickRandomOptions(this.getUpgradeCandidatePool(), 3);
+    if (this.phase !== "upgrade") return [];
+    const options = this.upgradeOptions.length > 0 ? this.upgradeOptions : this.pickWeightedOptions(this.getUpgradeCandidatePool(), 3);
+    return options.map((option) => this.describeUpgradeOption(option));
+  }
+
+  private getBossRewardOptions() {
+    if (this.phase !== "bossReward") return [];
+    const evolution = this.pendingEvolution ? EVOLUTION_RECIPES.find((recipe) => recipe.id === this.pendingEvolution) : undefined;
+    return [
+      { id: "repair" as const, title: "修復", description: this.health < this.maxHealth ? `耐久を${Math.max(28, Math.ceil(this.maxHealth * 0.35))}回復` : "耐久最大のまま次の戦闘へ", enabled: true },
+      { id: "amplify" as const, title: "増幅", description: `全攻撃 +8%（現在 x${this.attackAmplifier.toFixed(2)}）`, enabled: this.attackAmplifier < 1.48 },
+      { id: "evolve" as const, title: "改造", description: evolution ? `${evolution.name}へ進化` : "Lv.3の対応武器ペアが必要", enabled: Boolean(evolution) },
+    ];
+  }
+
+  private describeUpgradeOption(option: UpgradeOption): UpgradeOption {
+    const currentLevel = this.getUpgradeLevel(option.id);
+    const nextLevel = currentLevel + 1;
+    const moduleId = this.isModuleId(option.id) ? option.id : undefined;
+    const recipe = moduleId
+      ? EVOLUTION_RECIPES.find((candidate) => candidate.modules.includes(moduleId))
+      : undefined;
+    const partner = recipe?.modules.find((candidateId) => candidateId !== moduleId);
+    const partnerOption = partner ? MODULE_UPGRADES.find((candidate) => candidate.id === partner) : undefined;
+    const evolutionHint = recipe
+      ? this.evolvedWeapons.has(recipe.id)
+        ? `${recipe.name} 完成済み`
+        : `${option.title} Lv.3 + ${partnerOption?.title ?? partner} Lv.3 → ${recipe.name}`
+      : undefined;
+    return {
+      ...option,
+      currentLevel,
+      nextLevel,
+      role: this.getUpgradeRole(option.id),
+      changeSummary: this.getUpgradeChangeSummary(option.id, currentLevel, nextLevel),
+      synergy: partner && this.moduleTiers[partner] > 0 ? `${partnerOption?.title ?? partner}と進化可能` : undefined,
+      evolutionHint,
+    };
+  }
+
+  private getUpgradeLevel(id: UpgradeId) {
+    if (this.isModuleId(id)) return this.moduleTiers[id];
+    if (id === "pulse") return this.weaponTier + this.railMastery;
+    if (id === "scatter") return this.scatterTier;
+    if (id === "orbit") return this.orbitTier;
+    if (id === "relay") return this.relayTier + this.relayMastery;
+    return this.barrierTier + this.barrierMastery;
+  }
+
+  private getUpgradeRole(id: UpgradeId) {
+    if (id === "pulse") return "単体攻撃 // 最寄り";
+    if (id === "scatter") return "前方攻撃 // 移動方向";
+    if (id === "orbit" || id === "nova" || id === "saw" || id === "reactive") return "周囲攻撃 // 防御";
+    if (id === "relay") return "機動 // 連射";
+    if (id === "barrier") return "防御 // 回収";
+    if (id === "vector" || id === "laser" || id === "harpoon") return "単体攻撃 // ボス優先";
+    if (id === "gravity" || id === "mortar" || id === "skyfall" || id === "needle") return "集団攻撃 // 密集地点";
+    if (id === "boomerang") return "往復攻撃 // 遠距離";
+    if (id === "mine") return "設置攻撃 // 移動跡";
+    if (id === "cryo" || id === "decoy" || id === "sonic") return "制御 // 敵誘導";
+    if (id === "corrosion") return "継続攻撃 // 弱体化";
+    return "集団攻撃 // 自動照準";
+  }
+
+  private getUpgradeChangeSummary(id: UpgradeId, currentLevel: number, nextLevel: number) {
+    if (id === "pulse") return this.weaponTier < 3 ? `ダメージ ${this.damage} → ${this.damage + 8}` : `熟練増幅 x${this.attackAmplifier.toFixed(2)} → x${Math.min(1.8, this.attackAmplifier + 0.02).toFixed(2)}`;
+    if (id === "scatter") return currentLevel === 0 ? "移動方向へ3発の散弾を追加" : `1発ダメージ ${10 + currentLevel * 5} → ${10 + nextLevel * 5}`;
+    if (id === "orbit") return currentLevel === 0 ? "周囲を守るセンチネル2基を追加" : `センチネル ${2 + Math.min(2, currentLevel - 1)} → ${2 + Math.min(2, nextLevel - 1)}基`;
+    if (id === "relay") return this.relayTier < 4 ? `射撃間隔 ${this.shotDelay.toFixed(2)} → ${Math.max(0.16, this.shotDelay - 0.08).toFixed(2)}秒 / 移動+0.7` : `熟練機動 // 移動速度 ${this.playerSpeed.toFixed(2)} → ${Math.min(12.5, this.playerSpeed + 0.18).toFixed(2)}`;
+    if (id === "barrier") return this.barrierTier < 4 ? `最大耐久 ${this.maxHealth} → ${Math.min(PLAYER_MAX_HEALTH_CAP, this.maxHealth + 8)} / 30回復` : `熟練整備 // 20回復 / 回収範囲を微増`;
+    if (this.isModuleId(id)) return currentLevel === 0 ? `${this.getUpgradeRole(id)}を新規導入` : `主効果をLv.${currentLevel} → Lv.${nextLevel}へ強化`;
+    return "装備性能を強化";
   }
 }

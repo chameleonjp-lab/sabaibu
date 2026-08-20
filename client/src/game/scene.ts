@@ -18,12 +18,16 @@ import { Scene } from "@babylonjs/core/scene";
 import { GAME_ASSETS } from "./assets";
 import { ARENA_OBSTACLES } from "./arena";
 import { GameWorld } from "./GameWorld";
-import type { GameSnapshot, ModuleId, UpgradeId } from "./types";
+import type { BossRewardId, GameMode, GameSnapshot, ModuleId, UpgradeId } from "./types";
 
 export interface GameHandle {
   scene: Scene;
   setTouchDirection: (x: number, z: number) => void;
   setCameraZoomMultiplier: (multiplier: number) => void;
+  setPaused: (paused: boolean) => void;
+  retire: () => void;
+  requestDodge: () => void;
+  chooseBossReward: (id: BossRewardId) => void;
   chooseUpgrade: (id: UpgradeId) => void;
   rerollUpgrades: () => void;
   restart: () => void;
@@ -31,6 +35,7 @@ export interface GameHandle {
 }
 
 export interface GameSceneOptions {
+  mode: GameMode;
   demoMode: boolean;
   forceUpgrade: boolean;
   forceModulePreview: boolean;
@@ -173,7 +178,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     warningBand.material = containmentCapMaterial;
   });
 
-  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview, options.levelPreview, options.balancePreviewLevel, options.variantPreviewLevel, options.milestoneBossPreviewLevel, options.milestoneRewardPreviewLevel, options.obstaclePreview, options.resultPreview);
+  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview, options.levelPreview, options.balancePreviewLevel, options.variantPreviewLevel, options.milestoneBossPreviewLevel, options.milestoneRewardPreviewLevel, options.obstaclePreview, options.resultPreview, options.mode);
   scene.onBeforeRenderObservable.add(() => {
     const delta = Math.min(0.05, scene.getEngine().getDeltaTime() / 1000);
     const forward = camera.target.subtract(camera.position);
@@ -200,6 +205,10 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     setCameraZoomMultiplier: (multiplier) => {
       cameraZoomMultiplier = Math.max(0.82, Math.min(1.22, multiplier));
     },
+    setPaused: (paused) => world.setPaused(paused),
+    retire: () => world.retire(),
+    requestDodge: () => world.requestDodge(),
+    chooseBossReward: (id) => world.chooseBossReward(id),
     chooseUpgrade: (id) => world.chooseUpgrade(id),
     rerollUpgrades: () => world.rerollUpgradeChoices(),
     restart: () => world.restart(),
