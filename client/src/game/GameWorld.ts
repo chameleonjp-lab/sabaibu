@@ -52,7 +52,7 @@ type Gem = { mesh: AbstractMesh; value: number };
 type RecoveryItem = { mesh: AbstractMesh; amount: number; life: number };
 type MagnetItem = { mesh: AbstractMesh; life: number };
 type Pylon = { mesh: AbstractMesh; life: number; cooldown: number; formationOffset: Vector3; core: AbstractMesh; aura: AbstractMesh; thrust: AbstractMesh };
-type Shockwave = { mesh: AbstractMesh; life: number; maxLife: number };
+type Shockwave = { mesh: AbstractMesh; life: number; maxLife: number; startScale?: number; endScale?: number };
 type RicochetShot = { mesh: AbstractMesh; target: Enemy; life: number; damage: number; bounces: number; hitTargets: Set<AbstractMesh> };
 type GravityCore = { mesh: AbstractMesh; life: number; pulse: number };
 type Decoy = { mesh: AbstractMesh; life: number; pulse: number };
@@ -81,8 +81,12 @@ const RECOVERY_DROP_CHANCE = 0.06;
 const MAGNET_DROP_CHANCE = 0.065 / 3;
 const PLAYER_RING_RADIUS = 1.28;
 const MAX_REROLLS_PER_RUN = 3;
+const IDLE_NEEDLE_WAIT_SECONDS = 2;
+const IDLE_NEEDLE_DAMAGE = 50;
+const BULWARK_DESTRUCTION_BLAST_RADIUS = 2.6;
 const MILESTONE_BOSS_HP_MULTIPLIER = 20;
 const MILESTONE_BOSS_SCALE_MULTIPLIER = 2;
+const PLAYER_MAX_HEALTH_CAP = 200;
 const MODULE_MILESTONE_START_LEVEL = 30;
 const MODULE_MILESTONE_INTERVAL = 7;
 
@@ -101,8 +105,9 @@ export class GameWorld {
   private readonly recoveryMaterial: StandardMaterial;
   private readonly magnetMaterial: StandardMaterial;
   private readonly ringMaterial: StandardMaterial;
+  private readonly enemyThreatMaterial: StandardMaterial;
   private readonly idleNeedleRedMaterial: StandardMaterial;
-  private readonly idleNeedleWhiteMaterial: StandardMaterial;
+  private readonly idleNeedlePaleRedMaterial: StandardMaterial;
   private readonly enemies: Enemy[] = [];
   private readonly projectiles: Projectile[] = [];
   private readonly gems: Gem[] = [];
@@ -229,11 +234,12 @@ export class GameWorld {
     this.enemyEyeMaterial = this.makeMaterial("drone-eye", new Color3(0.03, 0.3, 0.34), new Color3(0.18, 0.95, 1));
     this.projectileMaterial = this.makeMaterial("amber-bolt", new Color3(1, 0.28, 0.01), new Color3(1, 0.58, 0.02));
     this.gemMaterial = this.makeMaterial("recovery-crystal", new Color3(0.18, 0.42, 0.01), new Color3(0.52, 1, 0.08));
-    this.recoveryMaterial = this.makeMaterial("field-medkit", new Color3(0.64, 0.06, 0.025), new Color3(1, 0.18, 0.04));
+    this.recoveryMaterial = this.makeMaterial("field-medkit", new Color3(0.015, 0.26, 0.18), new Color3(0.04, 0.82, 0.5));
     this.magnetMaterial = this.makeMaterial("xp-magnet", new Color3(0.035, 0.12, 0.68), new Color3(0.1, 0.42, 1));
     this.ringMaterial = this.makeMaterial("safety-ring", new Color3(0.9, 0.22, 0.015), new Color3(1, 0.5, 0.03));
+    this.enemyThreatMaterial = this.makeMaterial("enemy-threat-red", new Color3(0.46, 0.008, 0.006), new Color3(1, 0.025, 0.014));
     this.idleNeedleRedMaterial = this.makeMaterial("idle-needle-red", new Color3(0.72, 0.015, 0.01), new Color3(1, 0.05, 0.025));
-    this.idleNeedleWhiteMaterial = this.makeMaterial("idle-needle-white", new Color3(0.92, 0.92, 0.86), new Color3(1, 0.95, 0.84));
+    this.idleNeedlePaleRedMaterial = this.makeMaterial("idle-needle-pale-red", new Color3(0.84, 0.12, 0.08), new Color3(1, 0.26, 0.16));
 
     const suit = this.makeMaterial("responder-suit", new Color3(0.58, 0.52, 0.37), new Color3(0.22, 0.08, 0.005));
     const visor = this.makeMaterial("responder-visor", new Color3(0.12, 0.05, 0.01), new Color3(1, 0.52, 0.02));
@@ -250,7 +256,7 @@ export class GameWorld {
     this.playerRing = ring;
     const hitRing = MeshBuilder.CreateTorus("containment-hit-ring", { diameter: 2.78, thickness: 0.13, tessellation: 48 }, scene);
     hitRing.position.y = 0.095;
-    hitRing.material = this.recoveryMaterial;
+    hitRing.material = this.enemyThreatMaterial;
     hitRing.parent = this.player;
     hitRing.isVisible = false;
     this.playerHitRing = hitRing;
@@ -320,7 +326,7 @@ export class GameWorld {
       striker.strikerMarker = this.createStrikerDashWarning(striker.mesh.position, striker.mesh.position.add(previewVector.scale(6.1)));
     }
     if (this.idlePreview) {
-      this.launchIdleNeedle(this.player.position.clone(), 4.2);
+      this.launchIdleNeedle(this.player.position.clone());
       this.idleStrikeCooldown = 9;
     }
     if (this.explosionPreview) {
@@ -338,7 +344,7 @@ export class GameWorld {
       previewBoss.maxHp = 1;
       previewBoss.enteringContainment = false;
     }
-    const hasDedicatedPreview = this.balancePreviewLevel >= 30 || this.variantPreviewLevel >= 40 || this.milestoneBossPreviewLevel >= 5 || this.milestoneRewardPreviewLevel >= 5 || this.obstaclePreview;
+    const hasDedicatedPreview = this.balancePreviewLevel >= 30 || this.variantPreviewLevel >= 40 || this.milestoneBossPreviewLevel >= 5 || this.milestoneRewardPreviewLevel >= 5 || this.obstaclePreview || this.idlePreview || this.explosionPreview || this.bossExplosionPreview || this.bossExplosionFarPreview;
     if (this.auditModule) {
       this.setupModuleAuditScenario(this.auditModule);
     } else if (this.debugMode && !hasDedicatedPreview) {
@@ -427,8 +433,8 @@ export class GameWorld {
       this.shotDelay = Math.max(0.16, this.shotDelay - 0.08);
       this.playerSpeed += 0.7;
     } else {
-      this.maxHealth += 16;
-      this.health = Math.min(this.maxHealth, this.health + 36);
+      this.maxHealth = Math.min(PLAYER_MAX_HEALTH_CAP, this.maxHealth + 8);
+      this.health = Math.min(this.maxHealth, this.health + 30);
       this.magnetRadius += 0.45;
     }
     this.phase = "playing";
@@ -616,8 +622,9 @@ export class GameWorld {
     this.recoveryMaterial.dispose();
     this.magnetMaterial.dispose();
     this.ringMaterial.dispose();
+    this.enemyThreatMaterial.dispose();
     this.idleNeedleRedMaterial.dispose();
-    this.idleNeedleWhiteMaterial.dispose();
+    this.idleNeedlePaleRedMaterial.dispose();
   }
 
   private updatePlayer(delta: number) {
@@ -639,7 +646,7 @@ export class GameWorld {
     if (playerMoved) this.idleSeconds = 0;
     else this.idleSeconds += delta;
     this.idleStrikeCooldown = Math.max(0, this.idleStrikeCooldown - delta);
-    if (this.idleSeconds >= 5 && this.idleStrikeCooldown <= 0) {
+    if (this.idleSeconds >= IDLE_NEEDLE_WAIT_SECONDS && this.idleStrikeCooldown <= 0) {
       this.launchIdleNeedle(this.player.position.clone());
       this.idleSeconds = 0;
       this.idleStrikeCooldown = 0.7;
@@ -649,7 +656,7 @@ export class GameWorld {
       needle.life -= delta;
       const progress = 1 - Math.max(0, needle.life) / needle.maxLife;
       const whitePhase = Math.floor(this.elapsed * 14 + index) % 2 === 0;
-      const material = whitePhase ? this.idleNeedleWhiteMaterial : this.idleNeedleRedMaterial;
+      const material = whitePhase ? this.idleNeedlePaleRedMaterial : this.idleNeedleRedMaterial;
       needle.mesh.material = material;
       needle.marker.material = material;
       needle.mesh.position.x = needle.target.x;
@@ -658,7 +665,7 @@ export class GameWorld {
       needle.mesh.scaling.y = 0.9 + progress * 0.32;
       needle.marker.scaling.setAll(0.72 + Math.sin(this.elapsed * 17) * 0.11 + progress * 0.22);
       if (needle.life > 0) continue;
-      if (Vector3.DistanceSquared(this.player.position, needle.target) <= 1.05 * 1.05) this.damagePlayer(20, 0.45, "idle-needle");
+      if (Vector3.DistanceSquared(this.player.position, needle.target) <= 1.05 * 1.05) this.damagePlayer(IDLE_NEEDLE_DAMAGE, 0.45, "idle-needle");
       const impact = MeshBuilder.CreateTorus("idle-needle-impact", { diameter: 0.68, thickness: 0.12, tessellation: 28 }, this.scene);
       impact.position.copyFrom(needle.target);
       impact.position.y = 0.15;
@@ -677,7 +684,7 @@ export class GameWorld {
     marker.material = this.idleNeedleRedMaterial;
     const needle = MeshBuilder.CreateCylinder("idle-needle", { height: 2.25, diameterTop: 0.06, diameterBottom: 0.38, tessellation: 6 }, this.scene);
     needle.position.copyFrom(target.add(new Vector3(0, 9.38, 0)));
-    needle.material = this.idleNeedleWhiteMaterial;
+    needle.material = this.idleNeedlePaleRedMaterial;
     this.idleNeedles.push({ mesh: needle, marker, target, life: fallDuration, maxLife: fallDuration });
   }
 
@@ -2370,7 +2377,9 @@ export class GameWorld {
       const shockwave = this.shockwaves[index];
       shockwave.life -= delta;
       const progress = 1 - shockwave.life / shockwave.maxLife;
-      shockwave.mesh.scaling.setAll(1 + progress * 8);
+      const startScale = shockwave.startScale ?? 1;
+      const endScale = shockwave.endScale ?? 9;
+      shockwave.mesh.scaling.setAll(startScale + (endScale - startScale) * progress);
       if (shockwave.life > 0) continue;
       shockwave.mesh.dispose();
       this.shockwaves.splice(index, 1);
@@ -2623,7 +2632,7 @@ export class GameWorld {
     const wave = MeshBuilder.CreateTorus("variant-pulse-wave", { diameter: Math.max(0.86, radius * 0.42), thickness: 0.07, tessellation: 30 }, this.scene);
     wave.position.copyFrom(enemy.mesh.position);
     wave.position.y = 0.14;
-    wave.material = enemy.highVariant ? this.getHighVariantMaterial(enemy.highVariant) : this.enemyMaterial;
+    wave.material = this.enemyThreatMaterial;
     this.shockwaves.push({ mesh: wave, life: damage > 0 ? 0.34 : 0.24, maxLife: damage > 0 ? 0.34 : 0.24 });
   }
 
@@ -2668,7 +2677,7 @@ export class GameWorld {
     const dashWave = MeshBuilder.CreateTorus("striker-dash-end", { diameter: 0.4, thickness: 0.065, tessellation: 20 }, this.scene);
     dashWave.position.copyFrom(enemy.mesh.position);
     dashWave.position.y = 0.16;
-    dashWave.material = this.strikerMaterial;
+    dashWave.material = this.enemyThreatMaterial;
     this.shockwaves.push({ mesh: dashWave, life: 0.2, maxLife: 0.2 });
     enemy.strikerAction = "none";
     enemy.strikerCooldown = 3.1 + Math.random() * 1.3;
@@ -2682,7 +2691,7 @@ export class GameWorld {
     marker.position.copyFrom(start.add(end).scale(0.5));
     marker.position.y = 0.12;
     marker.rotation.y = Math.atan2(direction.x, direction.z);
-    marker.material = this.magnetMaterial;
+    marker.material = this.enemyThreatMaterial;
     return marker;
   }
 
@@ -2691,7 +2700,7 @@ export class GameWorld {
     const wave = MeshBuilder.CreateTorus("bulwark-overdrive", { diameter: 0.8, thickness: 0.14, tessellation: 32 }, this.scene);
     wave.position.copyFrom(enemy.mesh.position);
     wave.position.y = 0.2;
-    wave.material = this.gemMaterial;
+    wave.material = this.enemyThreatMaterial;
     this.shockwaves.push({ mesh: wave, life: 0.6, maxLife: 0.6 });
     enemy.bossCooldown = Math.min(enemy.bossCooldown, 1.15);
   }
@@ -2742,12 +2751,12 @@ export class GameWorld {
       const radius = 1.85;
       const strike = MeshBuilder.CreateCylinder("bulwark-barrage", { height: 5.8, diameter: 0.18, tessellation: 8 }, this.scene);
       strike.position.copyFrom(enemy.bossTarget.add(new Vector3(0, 2.9, 0)));
-      strike.material = this.gemMaterial;
+      strike.material = this.enemyThreatMaterial;
       this.energyTraces.push({ mesh: strike, life: 0.13, maxLife: 0.13 });
       const wave = MeshBuilder.CreateTorus("bulwark-barrage-impact", { diameter: 0.56, thickness: 0.11, tessellation: 28 }, this.scene);
       wave.position.copyFrom(enemy.bossTarget);
       wave.position.y = 0.16;
-      wave.material = this.gemMaterial;
+      wave.material = this.enemyThreatMaterial;
       this.shockwaves.push({ mesh: wave, life: 0.32, maxLife: 0.32 });
       if (Vector3.DistanceSquared(this.player.position, enemy.bossTarget) <= radius * radius) this.damagePlayer(10 + Math.floor(this.elapsed / 105), 0.42, "bulwark-barrage");
       enemy.bossBursts -= 1;
@@ -2771,7 +2780,7 @@ export class GameWorld {
       const wave = MeshBuilder.CreateTorus("bulwark-shockwave", { diameter: 0.65, thickness: 0.14, tessellation: 32 }, this.scene);
       wave.position.copyFrom(enemy.mesh.position);
       wave.position.y = 0.18;
-      wave.material = this.recoveryMaterial;
+      wave.material = this.enemyThreatMaterial;
       this.shockwaves.push({ mesh: wave, life: 0.46, maxLife: 0.46 });
       if (Vector3.DistanceSquared(this.player.position, enemy.mesh.position) <= radius * radius) this.damagePlayer(12 + Math.floor(this.elapsed / 95), 0.48, "bulwark-shockwave");
       this.finishBulwarkAction(enemy, 4.4);
@@ -2784,12 +2793,12 @@ export class GameWorld {
       if (enemy.bossTimer > 0) return true;
       const strike = MeshBuilder.CreateCylinder("bulwark-artillery", { height: 6.2, diameter: 0.26, tessellation: 8 }, this.scene);
       strike.position.copyFrom(enemy.bossTarget.add(new Vector3(0, 3.1, 0)));
-      strike.material = this.recoveryMaterial;
+      strike.material = this.enemyThreatMaterial;
       this.energyTraces.push({ mesh: strike, life: 0.16, maxLife: 0.16 });
       const wave = MeshBuilder.CreateTorus("bulwark-artillery-impact", { diameter: 0.75, thickness: 0.13, tessellation: 28 }, this.scene);
       wave.position.copyFrom(enemy.bossTarget);
       wave.position.y = 0.16;
-      wave.material = this.recoveryMaterial;
+      wave.material = this.enemyThreatMaterial;
       this.shockwaves.push({ mesh: wave, life: 0.42, maxLife: 0.42 });
       if (Vector3.DistanceSquared(this.player.position, enemy.bossTarget) <= 3.15 * 3.15) this.damagePlayer(14 + Math.floor(this.elapsed / 85), 0.52, "bulwark-artillery");
       this.finishBulwarkAction(enemy, 4.8);
@@ -2820,7 +2829,7 @@ export class GameWorld {
     const marker = MeshBuilder.CreateTorus("bulwark-warning", { diameter, thickness: 0.1, tessellation: 28 }, this.scene);
     marker.position.copyFrom(position);
     marker.position.y = 0.14;
-    marker.material = this.magnetMaterial;
+    marker.material = this.enemyThreatMaterial;
     return marker;
   }
 
@@ -2880,15 +2889,16 @@ export class GameWorld {
     if (enemy.lastDamagedBy) this.combatStats[enemy.lastDamagedBy].kills += 1;
     if (this.debugMode) this.debugKills += 1;
     if (enemy.kind === "bulwark") {
-      const blastRadius = 2.6;
-      const explosion = MeshBuilder.CreateTorus("bulwark-destruction-blast", { diameter: 0.92, thickness: 0.16, tessellation: 28 }, this.scene);
+      const blastRadius = BULWARK_DESTRUCTION_BLAST_RADIUS;
+      const explosion = MeshBuilder.CreateTorus("bulwark-destruction-blast", { diameter: blastRadius * 2, thickness: 0.12, tessellation: 36 }, this.scene);
       explosion.position.copyFrom(position);
       explosion.position.y = 0.18;
-      explosion.material = this.recoveryMaterial;
-      this.shockwaves.push({ mesh: explosion, life: 0.44, maxLife: 0.44 });
+      explosion.material = this.enemyThreatMaterial;
+      this.shockwaves.push({ mesh: explosion, life: 0.44, maxLife: 0.44, startScale: 0.92, endScale: 1.08 });
       const dx = this.player.position.x - position.x;
       const dz = this.player.position.z - position.z;
-      if (dx * dx + dz * dz <= blastRadius * blastRadius) this.damagePlayer(10, 0.42, "bulwark-destruction");
+      const playerInsideBlast = dx * dx + dz * dz <= blastRadius * blastRadius;
+      if (playerInsideBlast) this.damagePlayer(10, 0.42, "bulwark-destruction");
     }
     const gem = MeshBuilder.CreateCylinder("energy-shard", { height: 0.42, diameterTop: 0.08, diameterBottom: 0.4, tessellation: 6 }, this.scene);
     gem.position = new Vector3(dropPosition.x, 0.33, dropPosition.z);
@@ -2903,7 +2913,7 @@ export class GameWorld {
   }
 
   private grantMilestoneBossReward(position: Vector3) {
-    this.maxHealth += 3;
+    this.maxHealth = Math.min(PLAYER_MAX_HEALTH_CAP, this.maxHealth + 3);
     this.health = this.maxHealth;
     this.level += 1;
     this.xpNeeded = this.getExperienceNeeded(this.level);

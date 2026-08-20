@@ -3,11 +3,12 @@
  * The HUD mode follows the live display dimensions so it never assumes one device shape.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { createGameScene, type GameHandle } from "@/game/scene";
 import { GAME_ASSETS } from "@/game/assets";
 import { MODULE_UPGRADES, type GameSnapshot, type IconId, type ModuleId, type UpgradeId } from "@/game/types";
+import "../settings-console.css";
 
 const INITIAL_SNAPSHOT: GameSnapshot = {
   phase: "playing", health: 100, maxHealth: 100, damageFlash: 0, xp: 0, xpNeeded: 9, level: 1, kills: 0, seconds: 0, weaponTier: 1, weaponCount: 0, weaponLimit: 5, moduleMilestone: false, rerollsRemaining: 3, enemyCount: 0, attacks: [], totalDamage: 0, resultStats: [], upgrades: [],
@@ -17,6 +18,22 @@ const formatTime = (seconds: number) => `${String(Math.floor(seconds / 60)).padS
 const formatStat = (value: number) => new Intl.NumberFormat("ja-JP").format(Math.round(value));
 const ModuleIcon = ({ id, className = "" }: { id: IconId; className?: string }) => <span className={`module-icon module-icon-${id} ${className}`} aria-hidden="true" />;
 type ViewportMode = "portrait-narrow" | "portrait" | "landscape-compact" | "landscape" | "desktop";
+type PlayerSettings = { stickOpacity: number; cameraZoom: number };
+const PLAYER_SETTINGS_STORAGE_KEY = "neon-siege-player-settings-v1";
+const DEFAULT_PLAYER_SETTINGS: PlayerSettings = { stickOpacity: 0.56, cameraZoom: 1 };
+
+const loadPlayerSettings = (): PlayerSettings => {
+  try {
+    const raw = window.localStorage.getItem(PLAYER_SETTINGS_STORAGE_KEY);
+    if (!raw) return DEFAULT_PLAYER_SETTINGS;
+    const value = JSON.parse(raw) as Partial<PlayerSettings>;
+    const stickOpacity = Number.isFinite(value.stickOpacity) ? Math.max(0.2, Math.min(1, value.stickOpacity!)) : DEFAULT_PLAYER_SETTINGS.stickOpacity;
+    const cameraZoom = Number.isFinite(value.cameraZoom) ? Math.max(0.82, Math.min(1.22, value.cameraZoom!)) : DEFAULT_PLAYER_SETTINGS.cameraZoom;
+    return { stickOpacity, cameraZoom };
+  } catch {
+    return DEFAULT_PLAYER_SETTINGS;
+  }
+};
 
 const getViewportMode = (width: number, height: number): ViewportMode => {
   const aspect = width / Math.max(1, height);
@@ -38,6 +55,7 @@ export default function GameCanvas() {
   const [stickOffset, setStickOffset] = useState({ x: 0, y: 0 });
   const [floatingStick, setFloatingStick] = useState<{ x: number; y: number } | null>(null);
   const [viewportMode, setViewportMode] = useState<ViewportMode>(() => getViewportMode(window.innerWidth, window.innerHeight));
+  const [playerSettings, setPlayerSettings] = useState<PlayerSettings>(loadPlayerSettings);
   const demoMode = new URLSearchParams(window.location.search).has("demo");
   const searchParams = new URLSearchParams(window.location.search);
   const rerollPreview = Number(searchParams.get("reroll") ?? (searchParams.has("reroll") ? "1" : "0"));
@@ -49,6 +67,9 @@ export default function GameCanvas() {
   const obstaclePreview = searchParams.has("obstacle");
   const resultPreview = searchParams.has("result");
   const touchPreview = searchParams.has("touch");
+  const settingsPreview = searchParams.has("settings");
+  const [settingsOpen, setSettingsOpen] = useState(settingsPreview);
+  const playerSettingsRef = useRef(playerSettings);
   const forceUpgrade = searchParams.has("upgrade") || rerollPreview > 0 || levelPreview > 0;
   const forceModulePreview = new URLSearchParams(window.location.search).has("modules");
   const bossPreview = new URLSearchParams(window.location.search).has("boss");
@@ -59,7 +80,7 @@ export default function GameCanvas() {
   const bossExplosionFarPreview = searchParams.has("bossExplosionFar");
   const auditValue = searchParams.get("audit");
   const auditModule = MODULE_UPGRADES.some((option) => option.id === auditValue) ? auditValue as ModuleId : undefined;
-  const debugMode = searchParams.has("debug") || Boolean(auditModule) || balancePreviewLevel > 0 || variantPreviewLevel > 0 || milestoneBossPreviewLevel > 0 || milestoneRewardPreviewLevel > 0 || obstaclePreview || resultPreview;
+  const debugMode = searchParams.has("debug") || Boolean(auditModule) || balancePreviewLevel > 0 || variantPreviewLevel > 0 || milestoneBossPreviewLevel > 0 || milestoneRewardPreviewLevel > 0 || obstaclePreview || resultPreview || idlePreview || explosionPreview || bossExplosionPreview || bossExplosionFarPreview;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -73,6 +94,7 @@ export default function GameCanvas() {
         return;
       }
       handleRef.current = handle;
+      handle.setCameraZoomMultiplier(playerSettingsRef.current.cameraZoom);
       engine.runRenderLoop(() => handle.scene.render());
     });
     const onResize = () => {
@@ -100,6 +122,21 @@ export default function GameCanvas() {
   }, [demoMode, forceUpgrade, forceModulePreview, bossPreview, strikerPreview, idlePreview, explosionPreview, bossExplosionPreview, bossExplosionFarPreview, auditModule, debugMode, rerollPreview, levelPreview, balancePreviewLevel, variantPreviewLevel, milestoneBossPreviewLevel, milestoneRewardPreviewLevel, obstaclePreview, resultPreview]);
 
   const setDirection = (x: number, z: number) => handleRef.current?.setTouchDirection(x, z);
+  const updatePlayerSettings = (next: PlayerSettings) => {
+    const safe = {
+      stickOpacity: Math.max(0.2, Math.min(1, next.stickOpacity)),
+      cameraZoom: Math.max(0.82, Math.min(1.22, next.cameraZoom)),
+    };
+    playerSettingsRef.current = safe;
+    setPlayerSettings(safe);
+    handleRef.current?.setCameraZoomMultiplier(safe.cameraZoom);
+    try {
+      window.localStorage.setItem(PLAYER_SETTINGS_STORAGE_KEY, JSON.stringify(safe));
+    } catch {
+      // Continue with the in-memory preference if storage is unavailable.
+    }
+  };
+  const resetPlayerSettings = () => updatePlayerSettings(DEFAULT_PLAYER_SETTINGS);
   useEffect(() => {
     if (!touchPreview) return;
     setFloatingStick({ x: window.innerWidth * 0.68, y: window.innerHeight * 0.62 });
@@ -144,7 +181,7 @@ export default function GameCanvas() {
   const xpPercent = (snapshot.xp / snapshot.xpNeeded) * 100;
 
   return (
-    <main ref={mainRef} className={`game-shell viewport-${viewportMode}`} aria-label="Neon Siege Survivor">
+    <main ref={mainRef} className={`game-shell viewport-${viewportMode}`} style={{ "--stick-opacity": playerSettings.stickOpacity } as CSSProperties} aria-label="Neon Siege Survivor">
       <canvas ref={canvasRef} className="game-canvas" style={{ touchAction: "none" }} />
       <div className="containment-floor-overlay" aria-hidden="true" />
       <img src={GAME_ASSETS.sigil} className="combat-sigil" alt="" aria-hidden="true" />
@@ -183,6 +220,23 @@ export default function GameCanvas() {
           <small>VECTOR<br/>DRIVE</small>
         </nav>}
         <aside className="mobile-fire-status" aria-hidden="true"><span>WPN</span><b>AUTO<br/>FIRE</b><i /></aside>
+        {snapshot.phase === "playing" && <><button className="settings-trigger" type="button" onClick={() => setSettingsOpen((open) => !open)} aria-expanded={settingsOpen} aria-controls="player-settings-panel">SETTINGS</button>
+        {settingsOpen && <section className="settings-console" id="player-settings-panel" aria-label="プレイヤー設定">
+          <header><div><span>PLAYER PREFERENCES</span><h2>FIELD <em>SETTINGS</em></h2></div><button type="button" onClick={() => setSettingsOpen(false)} aria-label="設定を閉じる">CLOSE</button></header>
+          <p>端末に保存され、次回の出撃にも適用されます。</p>
+          <label className="settings-control">
+            <span><b>STICK VISIBILITY</b><i>{Math.round(playerSettings.stickOpacity * 100)}%</i></span>
+            <input type="range" min="20" max="100" step="1" value={Math.round(playerSettings.stickOpacity * 100)} onChange={(event) => updatePlayerSettings({ ...playerSettings, stickOpacity: Number(event.target.value) / 100 })} />
+            <small>フローティング仮想スティックの透明度</small>
+          </label>
+          <div className="settings-stick-preview" style={{ "--preview-opacity": playerSettings.stickOpacity } as CSSProperties} aria-hidden="true"><i /><b>STICK PREVIEW</b></div>
+          <label className="settings-control">
+            <span><b>CAMERA ZOOM</b><i>{Math.round(playerSettings.cameraZoom * 100)}%</i></span>
+            <input type="range" min="82" max="122" step="1" value={Math.round(playerSettings.cameraZoom * 100)} onChange={(event) => updatePlayerSettings({ ...playerSettings, cameraZoom: Number(event.target.value) / 100 })} />
+            <small>低い値で近く、高い値で広い視界</small>
+          </label>
+          <footer><button type="button" onClick={resetPlayerSettings}>RESET DEFAULTS</button><small>DEFAULT: 56% / 100%</small></footer>
+        </section>}</>}
 
         {snapshot.phase === "upgrade" && <div className="modal-layer"><section className="upgrade-console"><p className="modal-eyebrow">{snapshot.moduleMilestone ? "MODULE BAY EXPANDED" : "SIGNAL OVERRIDE ACCEPTED"}</p><h2>SELECT A FIELD<br/><em>MODIFICATION.</em></h2><p className="modal-copy">{snapshot.moduleMilestone ? "7Lv周期の新規攻撃モジュール候補です。ひとつだけ導入してください。" : "既存装備の強化候補から、ひとつだけ承認してください。"} 追加武器枠 {snapshot.weaponCount}/{snapshot.weaponLimit}。</p><div className="upgrade-actions"><button className="reroll-button" onClick={rerollUpgrades} disabled={snapshot.rerollsRemaining <= 0}>REROLL <span>{snapshot.rerollsRemaining}/3</span></button><small>候補を再抽選</small></div><div className="upgrade-grid">{snapshot.upgrades.map((upgrade, index) => <button key={upgrade.id} className="upgrade-card" onClick={() => selectUpgrade(upgrade.id)}><span className="choice-number">0{index + 1}</span><ModuleIcon id={upgrade.iconId} className="upgrade-symbol"/><span className="upgrade-code">{upgrade.code}</span><strong>{upgrade.title}</strong><small>{upgrade.description}</small><i>INSTALL</i></button>)}</div></section></div>}
         {snapshot.phase === "gameover" && <div className="modal-layer"><section className="failure-console result-console"><p className="modal-eyebrow danger">CONTAINMENT BREACH // AFTER ACTION REPORT</p><h2>SIGNAL<br/><em>LOST.</em></h2><div className="result-summary"><span><small>SURVIVAL TIME</small><b>{formatTime(snapshot.seconds)}</b></span><span><small>HOSTILES PURGED</small><b>{formatStat(snapshot.kills)}</b></span><span><small>TOTAL DAMAGE</small><b>{formatStat(snapshot.totalDamage)}</b></span><span><small>FINAL LEVEL</small><b>LV.{String(snapshot.level).padStart(2, "0")}</b></span></div><section className="result-breakdown" aria-label="武器別戦闘統計"><header><span>WEAPON TELEMETRY</span><small>DAMAGE / KILLS</small></header><div className="result-stat-list">{snapshot.resultStats.map((stat, index) => <div className="result-stat-row" key={stat.id}><span className="result-rank">{String(index + 1).padStart(2, "0")}</span><ModuleIcon id={stat.iconId} className="result-stat-icon"/><strong>{stat.label}<small>LV.{String(stat.tier).padStart(2, "0")}</small></strong><b>{formatStat(stat.damage)}<small>DMG</small></b><i>{formatStat(stat.kills)}<small>KILLS</small></i></div>)}</div></section><p>封鎖線は崩壊しました。記録された戦闘テレメトリーを再確認し、次の出撃に備えてください。</p><button onClick={() => handleRef.current?.restart()}>RE-ENTER THE SIEGE <span>GO</span></button></section></div>}
