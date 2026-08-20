@@ -1,8 +1,11 @@
 /* Amberline settings: compact field panel that preserves the active arena and control surface. */
 .settings-trigger { position: absolute; z-index: 9; top: 66px; right: max(16px, env(safe-area-inset-right)); pointer-events: auto; border: 1px solid rgba(112, 238, 240, .42); background: rgba(7, 18, 20, .72); color: #9df1ef; padding: 7px 9px; font: 700 8px/1 "IBM Plex Mono", monospace; letter-spacing: .12em; backdrop-filter: blur(7px); transition: border-color .16s ease-out, background .16s ease-out, transform .16s ease-out; }
 .settings-trigger:hover { border-color: rgba(194, 255, 255, .85); background: rgba(13, 40, 41, .9); }
+.settings-trigger:disabled { opacity: .38; cursor: not-allowed; transform: none; }
 .settings-trigger:active { transform: scale(.97); }
+.run-controls .settings-trigger { position: static; top: auto; right: auto; }
 .settings-console { position: absolute; z-index: 10; top: 102px; right: max(16px, env(safe-area-inset-right)); width: min(330px, calc(100vw - 32px)); pointer-events: auto; border: 1px solid rgba(96, 228, 232, .42); background: linear-gradient(145deg, rgba(7, 23, 26, .96), rgba(4, 9, 10, .97)); box-shadow: 0 20px 60px rgba(0, 0, 0, .46), inset 0 0 30px rgba(87, 231, 232, .05); backdrop-filter: blur(13px); padding: 15px; animation: settings-panel-in .18s cubic-bezier(.23, 1, .32, 1); }
+.settings-console.settings-dialog { position: relative; top: 0; right: auto; width: min(430px, 100%); max-height: calc(100svh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 28px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .settings-console header, .settings-console footer, .settings-control > span { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .settings-console header { padding-bottom: 12px; border-bottom: 1px solid rgba(125, 237, 239, .16); }
 .settings-console header span, .settings-console header h2, .settings-console p, .settings-console small, .settings-console button { font-family: "IBM Plex Mono", monospace; }
@@ -41,4 +44,8 @@
   .settings-stick-preview i { width: 16px; height: 16px; }
   .settings-stick-preview b { bottom: -10px; font-size: 5px; }
   .settings-console footer { margin-top: 11px; padding-top: 8px; }
+}
+@media (pointer: coarse) {
+  .settings-console button, .settings-console input, .settings-trigger { min-height: 44px; }
+  .settings-console header button { min-width: 44px; }
 }
