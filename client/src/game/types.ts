@@ -66,7 +66,7 @@ export const STANDARD_UPGRADES: UpgradeOption[] = [
   { id: "scatter", code: "WPN-24", title: "散弾アレイ", description: "近距離を薙ぎ払う三連散弾を追加または強化する。", iconId: "scatter", category: "standard" },
   { id: "orbit", code: "WPN-52", title: "周回センチネル", description: "接近する敵を切り払う周回センチネルを追加または強化する。", iconId: "orbit", category: "standard" },
   { id: "relay", code: "SYS-24", title: "フラックス中継機", description: "射撃間隔と移動機構を最適化する。", iconId: "relay", category: "standard" },
-  { id: "barrier", code: "DEF-09", title: "防壁コア", description: "装甲を再構成し、耐久値を回復する。", iconId: "barrier", category: "standard" },
+  { id: "barrier", code: "DEF-09", title: "防壁コア", description: "最大耐久+8（上限200）、即時30回復。", iconId: "barrier", category: "standard" },
 ];
 
 export const MODULE_UPGRADES: UpgradeOption[] = [

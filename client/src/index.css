@@ -159,7 +159,7 @@ button { font: inherit; }
 
 /* Amberline touch input: the movement origin materializes exactly where the player begins a drag. */
 .floating-control-surface { position: absolute; inset: 0; z-index: 4; pointer-events: auto; touch-action: none; }
-.game-shell .touch-drive.touch-drive-floating { position: absolute; z-index: 5; display: grid; place-items: center; width: 128px; height: 128px; margin: -64px; pointer-events: none; touch-action: none; user-select: none; border: 1px solid rgba(255, 236, 198, .24); border-radius: 50%; background: radial-gradient(circle, rgba(255, 222, 158, .1) 0 30%, rgba(101, 87, 64, .035) 58%, rgba(4, 9, 10, .015) 72%); box-shadow: inset 0 0 24px rgba(255, 226, 173, .08); animation: floating-stick-in .14s cubic-bezier(.23, 1, .32, 1); }
+.game-shell .touch-drive.touch-drive-floating { position: absolute; z-index: 5; display: grid; place-items: center; width: 128px; height: 128px; margin: -64px; pointer-events: none; touch-action: none; user-select: none; opacity: var(--stick-opacity, .56); border: 1px solid rgba(255, 236, 198, .24); border-radius: 50%; background: radial-gradient(circle, rgba(255, 222, 158, .1) 0 30%, rgba(101, 87, 64, .035) 58%, rgba(4, 9, 10, .015) 72%); box-shadow: inset 0 0 24px rgba(255, 226, 173, .08); animation: floating-stick-in .14s cubic-bezier(.23, 1, .32, 1); }
 .touch-drive-floating .joystick-rings { position: absolute; inset: 17px; border: 1px solid rgba(255, 236, 198, .2); border-radius: 50%; }
 .touch-drive-floating .joystick-rings::before, .touch-drive-floating .joystick-rings::after { content: ""; position: absolute; background: rgba(255, 238, 205, .16); }
 .touch-drive-floating .joystick-rings::before { top: 9px; bottom: 9px; left: 50%; width: 1px; }
@@ -167,7 +167,7 @@ button { font: inherit; }
 .touch-drive-floating .joystick-knob { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 42px; height: 42px; margin: -21px; border: 1px solid rgba(255, 241, 211, .44); border-radius: 50%; background: rgba(87, 69, 48, .3); box-shadow: inset 0 0 10px rgba(255, 240, 204, .16); transition: transform .06s linear; }
 .touch-drive-floating .joystick-knob i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 247, 226, .72); box-shadow: 0 0 8px rgba(255, 231, 175, .22); }
 .touch-drive-floating small { position: absolute; inset: auto 0 10px; color: rgba(255, 238, 199, .46); text-align: center; font: 700 7px/1.15 "IBM Plex Mono", monospace; letter-spacing: .14em; }
-@keyframes floating-stick-in { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+@keyframes floating-stick-in { from { transform: scale(.9); } to { transform: scale(1); } }
 @media (max-width: 700px) { .game-shell .touch-drive.touch-drive-floating { width: 112px; height: 112px; margin: -56px; } }
 
 /* Amberline responsive HUD: density follows the usable mobile aspect ratio, not a single handset width. */

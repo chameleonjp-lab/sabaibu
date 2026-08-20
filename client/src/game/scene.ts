@@ -23,6 +23,7 @@ import type { GameSnapshot, ModuleId, UpgradeId } from "./types";
 export interface GameHandle {
   scene: Scene;
   setTouchDirection: (x: number, z: number) => void;
+  setCameraZoomMultiplier: (multiplier: number) => void;
   chooseUpgrade: (id: UpgradeId) => void;
   rerollUpgrades: () => void;
   restart: () => void;
@@ -77,6 +78,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
   camera.lowerRadiusLimit = 22;
   camera.upperRadiusLimit = 44;
   camera.fov = initialProfile.fov;
+  let cameraZoomMultiplier = 1;
   camera.attachControl(canvas, false);
   camera.inputs.clear();
 
@@ -182,18 +184,22 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     world.update(delta);
     const framing = world.getFramingState();
     const profile = getViewportCameraProfile(scene.getEngine().getRenderWidth(), scene.getEngine().getRenderHeight());
-    const desiredRadius = Math.min(40, 30 + Math.min(10, framing.nearbyEnemyCount * 0.38)) * profile.radiusScale;
+    const baseRadius = Math.min(40, 30 + Math.min(10, framing.nearbyEnemyCount * 0.38)) * profile.radiusScale;
+    const desiredRadius = Math.max(camera.lowerRadiusLimit ?? 22, Math.min(43.5, baseRadius * cameraZoomMultiplier));
     const cameraEase = Math.min(1, delta * 2.8);
     camera.radius += (desiredRadius - camera.radius) * cameraEase;
     camera.fov += (profile.fov - camera.fov) * Math.min(1, delta * 4.4);
     camera.beta += (profile.beta - camera.beta) * Math.min(1, delta * 4.4);
     camera.target.copyFrom(framing.playerPosition);
-    world.setCombatRadius(Math.max(15, camera.radius * profile.combatRadiusScale));
+    world.setCombatRadius(Math.max(15, (camera.radius ?? desiredRadius) * profile.combatRadiusScale));
   });
 
   return {
     scene,
     setTouchDirection: (x, z) => world.setTouchDirection(x, z),
+    setCameraZoomMultiplier: (multiplier) => {
+      cameraZoomMultiplier = Math.max(0.82, Math.min(1.22, multiplier));
+    },
     chooseUpgrade: (id) => world.chooseUpgrade(id),
     rerollUpgrades: () => world.rerollUpgradeChoices(),
     restart: () => world.restart(),
