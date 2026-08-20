@@ -17,6 +17,11 @@ export type GameSoundCue =
 
 const AUDIO_STORAGE_KEY = "neon-siege-player-audio-v1";
 
+const externalSampleSources: Partial<Record<GameSoundCue, string>> = {
+  boss: "/audio/cc0-metal1.wav",
+  choice: "/audio/cc0-switch1.wav",
+};
+
 const readStoredAudio = () => {
   try {
     const raw = window.localStorage.getItem(AUDIO_STORAGE_KEY);
@@ -60,11 +65,14 @@ const cueDuration: Record<GameSoundCue, number> = {
 };
 
 /**
- * Small synthesized cues keep the game responsive without shipping audio assets.
+ * Most cues are synthesized for tight timing. A small number of CC0 samples
+ * are layered on the same AudioContext clock after they have been decoded.
  * AudioContext is created and resumed only from an explicit user gesture.
  */
 export function useGameAudio() {
   const contextRef = useRef<AudioContext | null>(null);
+  const externalBuffersRef = useRef<Partial<Record<GameSoundCue, AudioBuffer>>>({});
+  const externalLoadingRef = useRef<Partial<Record<GameSoundCue, boolean>>>({});
   const [enabled, setEnabledState] = useState(readStoredAudio);
 
   const getContext = useCallback(() => {
@@ -81,12 +89,6 @@ export function useGameAudio() {
     return contextRef.current;
   }, []);
 
-  const unlock = useCallback(async () => {
-    const context = getContext();
-    if (!context) return;
-    await context.resume().catch(() => undefined);
-  }, [getContext]);
-
   const setEnabled = useCallback((next: boolean) => {
     setEnabledState(next);
     try {
@@ -94,6 +96,27 @@ export function useGameAudio() {
     } catch {
       // Continue with the in-memory preference if storage is unavailable.
     }
+  }, []);
+
+  const preloadExternalSamples = useCallback((context: AudioContext) => {
+    Object.entries(externalSampleSources).forEach(([cue, source]) => {
+      const sampleCue = cue as GameSoundCue;
+      if (!source || externalBuffersRef.current[sampleCue] || externalLoadingRef.current[sampleCue]) return;
+      externalLoadingRef.current[sampleCue] = true;
+      void fetch(source)
+        .then((response) => {
+          if (!response.ok) throw new Error(`Audio sample request failed: ${response.status}`);
+          return response.arrayBuffer();
+        })
+        .then((data) => context.decodeAudioData(data))
+        .then((buffer) => {
+          if (contextRef.current === context) externalBuffersRef.current[sampleCue] = buffer;
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          externalLoadingRef.current[sampleCue] = false;
+        });
+    });
   }, []);
 
   const play = useCallback((cue: GameSoundCue) => {
@@ -110,6 +133,20 @@ export function useGameAudio() {
     master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     master.connect(context.destination);
 
+    const externalBuffer = externalBuffersRef.current[cue];
+    if (externalBuffer) {
+      const sampleGain = context.createGain();
+      sampleGain.gain.setValueAtTime(0.0001, now);
+      sampleGain.gain.exponentialRampToValueAtTime(cue === "boss" ? 0.16 : 0.12, now + 0.006);
+      sampleGain.gain.exponentialRampToValueAtTime(0.0001, now + Math.min(externalBuffer.duration, 0.72));
+      sampleGain.connect(context.destination);
+      const sample = context.createBufferSource();
+      sample.buffer = externalBuffer;
+      sample.connect(sampleGain);
+      sample.start(now);
+      sample.stop(now + Math.min(externalBuffer.duration, 0.72) + 0.02);
+    }
+
     frequenciesForCue.forEach((frequency, index) => {
       const oscillator = context.createOscillator();
       oscillator.type = cue === "damage" || cue === "warning" ? "sawtooth" : "triangle";
@@ -120,6 +157,13 @@ export function useGameAudio() {
       oscillator.stop(now + duration + 0.02);
     });
   }, [enabled]);
+
+  const unlock = useCallback(async () => {
+    const context = getContext();
+    if (!context) return;
+    await context.resume().catch(() => undefined);
+    preloadExternalSamples(context);
+  }, [getContext, preloadExternalSamples]);
 
   useEffect(() => () => {
     const context = contextRef.current;
