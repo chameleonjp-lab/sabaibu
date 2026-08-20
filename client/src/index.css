@@ -270,6 +270,25 @@ button { font: inherit; }
 .result-stat-row > i { color: #aefb71; }
 .result-stat-row > b small, .result-stat-row > i small { color: rgba(255, 218, 153, .55); font-size: 7px; }
 .result-console > p { margin: 0 0 14px; color: rgba(230, 241, 231, .72); }
+.result-ranking-panel { margin: 0 0 14px; border: 1px solid rgba(255, 173, 38, .34); background: linear-gradient(180deg, rgba(31, 23, 12, .88), rgba(7, 12, 13, .95)); }
+.result-ranking-panel > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 10px 13px; border-bottom: 1px solid rgba(255, 173, 38, .2); }
+.result-ranking-panel > header span, .result-ranking-panel > header small { color: rgba(255, 218, 153, .68); font: 700 8px / 1.2 "IBM Plex Mono", monospace; letter-spacing: .12em; }
+.result-ranking-panel > header h3 { margin: 4px 0 0; color: #fff4d8; font: 700 18px / 1 "Chakra Petch", sans-serif; letter-spacing: .04em; }
+.result-ranking-panel > header small { color: #afff6d; }
+.result-ranking-status { margin: 0 !important; padding: 9px 13px 7px; color: rgba(238, 247, 224, .72) !important; font: 600 10px / 1.4 "IBM Plex Mono", monospace; }
+.ranking-status-submitting { color: #ffcf79 !important; }
+.ranking-status-submitted { color: #afff6d !important; }
+.ranking-status-failed { color: #ff9e8c !important; }
+.result-ranking-list { display: grid; gap: 1px; margin: 0; padding: 0 9px 9px; list-style: none; background: rgba(255, 173, 38, .08); }
+.result-ranking-list li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 9px; align-items: center; min-height: 38px; padding: 6px 8px; color: #f1f7e9; background: rgba(5, 10, 10, .88); font: 600 11px / 1.15 "IBM Plex Mono", monospace; }
+.result-ranking-list li.is-current-player { background: rgba(175, 255, 109, .13); box-shadow: inset 2px 0 #afff6d; }
+.result-ranking-list li > b { color: #ffcf79; }
+.result-ranking-list li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-ranking-list li > span small { margin-left: 7px; color: #afff6d; font-size: 8px; }
+.result-ranking-list li > strong { color: #fff1d0; font: 700 15px / 1 "Chakra Petch", sans-serif; }
+.result-ranking-empty { margin: 0 !important; padding: 9px 13px 13px; color: rgba(230, 241, 231, .62) !important; font-size: 10px !important; }
+.ranking-retry-button { width: calc(100% - 26px) !important; margin: 0 13px 13px; min-height: 40px; padding: 9px 12px; color: #1a1003; border: 0; background: #ffad26; cursor: pointer; font: 700 10px / 1 "IBM Plex Mono", monospace; letter-spacing: .1em; }
+.ranking-retry-button:hover { background: #ffc45e; }
 @media (max-width: 700px) {
   .result-console { width: min(96vw, 620px); padding: 18px 15px; }
   .result-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -334,7 +353,7 @@ button { font: inherit; }
 .pause-trigger { min-height: 36px; padding: 7px 10px; color: #d2ffff; border: 1px solid rgba(117, 239, 236, .42); background: rgba(7, 18, 20, .76); cursor: pointer; font: 700 8px / 1 "IBM Plex Mono", monospace; letter-spacing: .12em; }
 .pause-trigger:hover, .pause-trigger:focus-visible { border-color: #bffffb; }
 .pause-trigger:disabled { opacity: .38; cursor: not-allowed; }
-.pause-trigger:focus-visible, .run-controls button:focus-visible, .dodge-button:focus-visible, .settings-console button:focus-visible, .upgrade-card:focus-visible, .boss-reward-card:focus-visible, .failure-console button:focus-visible, .tutorial-console button:focus-visible { outline: 3px solid rgba(169, 255, 246, .9); outline-offset: 2px; }
+.pause-trigger:focus-visible, .run-controls button:focus-visible, .dodge-button:focus-visible, .settings-console button:focus-visible, .upgrade-card:focus-visible, .boss-reward-card:focus-visible, .failure-console button:focus-visible, .ranking-retry-button:focus-visible, .tutorial-console button:focus-visible { outline: 3px solid rgba(169, 255, 246, .9); outline-offset: 2px; }
 .combat-metrics { position: absolute; top: clamp(116px, 14vh, 152px); right: max(18px, env(safe-area-inset-right)); display: flex; gap: 13px; padding: 8px 10px; border-right: 2px solid #ffad26; background: rgba(6, 12, 12, .58); pointer-events: none; }
 .combat-metrics span { display: grid; gap: 3px; text-align: right; }
 .combat-metrics small { color: rgba(239, 229, 211, .64); font: 500 7px / 1 "IBM Plex Mono", monospace; letter-spacing: .12em; }
