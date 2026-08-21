@@ -47,6 +47,10 @@ jobs:
             echo "Found a root-relative asset reference in the Pages HTML."
             exit 1
           fi
+          if grep -Eq 'src="/src/' dist/public/index.html; then
+            echo "Found an unbuilt source entry in the Pages HTML."
+            exit 1
+          fi
           if grep -Eq '%VITE_[A-Z0-9_]+%' dist/public/index.html; then
             echo "Found an unresolved Vite placeholder in the Pages HTML."
             exit 1
