@@ -204,8 +204,10 @@ function vitePluginStorageProxy(): Plugin {
 }
 
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
+const basePath = process.env.VITE_BASE_PATH ?? (process.env.GITHUB_ACTIONS === "true" ? "/sabaibu/" : "/");
 
 export default defineConfig({
+  base: basePath,
   plugins,
   resolve: {
     alias: {
