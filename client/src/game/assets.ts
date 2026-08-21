@@ -1,11 +1,11 @@
 /**
- * Amberline Cataclysm: generated industrial textures live in managed storage,
- * never inside the WebDev project tree.
+ * Self-contained assets used by both the local preview and GitHub Pages.
+ * BASE_URL keeps these references valid under the repository project path.
  */
 
 export const GAME_ASSETS = {
-  floor: "/manus-storage/neon-siege-floor-plate_b0768056.png",
-  dronePanel: "/manus-storage/neon-siege-drone-panel_9b8f921e.png",
-  sigil: "/manus-storage/neon-siege-sigil_cbac5e3c.png",
-  visualTarget: "/manus-storage/neon-siege-visual-target_d49c90a5.png",
+  floor: `${import.meta.env.BASE_URL}assets/neon-siege-floor.svg`,
+  dronePanel: `${import.meta.env.BASE_URL}assets/neon-siege-drone-panel.svg`,
+  sigil: `${import.meta.env.BASE_URL}assets/neon-siege-sigil.svg`,
+  visualTarget: `${import.meta.env.BASE_URL}assets/neon-siege-visual-target.svg`,
 } as const;
