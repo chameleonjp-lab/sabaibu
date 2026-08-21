@@ -18,8 +18,8 @@ export type GameSoundCue =
 const AUDIO_STORAGE_KEY = "neon-siege-player-audio-v1";
 
 const externalSampleSources: Partial<Record<GameSoundCue, string>> = {
-  boss: "/audio/cc0-metal1.wav",
-  choice: "/audio/cc0-switch1.wav",
+  boss: `${import.meta.env.BASE_URL}audio/cc0-metal1.wav`,
+  choice: `${import.meta.env.BASE_URL}audio/cc0-switch1.wav`,
 };
 
 const readStoredAudio = () => {

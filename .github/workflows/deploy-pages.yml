@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -12,7 +15,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -39,6 +42,34 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      - name: Verify Pages artifact
+        shell: bash
+        run: |
+          test -s dist/public/index.html
+          if grep -Eq '(src|href)="/assets/' dist/public/index.html; then
+            echo "Found a root-relative asset reference in the Pages HTML."
+            exit 1
+          fi
+          if grep -Eq 'src="/src/' dist/public/index.html; then
+            echo "Found an unbuilt source entry in the Pages HTML."
+            exit 1
+          fi
+          if grep -Eq '%VITE_[A-Z0-9_]+%' dist/public/index.html; then
+            echo "Found an unresolved Vite placeholder in the Pages HTML."
+            exit 1
+          fi
+          grep -Eq '(src|href)="/sabaibu/assets/' dist/public/index.html
+          for asset in \
+            neon-siege-floor.svg \
+            neon-siege-drone-panel.svg \
+            neon-siege-sigil.svg \
+            neon-siege-visual-target.svg; do
+            test -s "dist/public/assets/$asset"
+          done
+          for audio in cc0-metal1.wav cc0-switch1.wav; do
+            test -s "dist/public/audio/$audio"
+          done
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
@@ -48,6 +79,7 @@ jobs:
           path: ./dist/public
 
   deploy:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
