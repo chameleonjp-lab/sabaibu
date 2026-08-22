@@ -1,10 +1,11 @@
 name: Apply Normal Mode Boss Rewards
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/normal-mode-boss-rewards
+      - main
     paths:
+      - "scripts/apply_normal_mode_boss_rewards.py"
       - ".github/workflows/apply-normal-mode-boss-rewards.yml"
 
 permissions:
@@ -18,7 +19,7 @@ jobs:
   patch-and-verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout branch
+      - name: Checkout implementation branch
         uses: actions/checkout@v4
         with:
           ref: fix/normal-mode-boss-rewards
