@@ -7,6 +7,12 @@ on:
     paths:
       - "scripts/.sabaibu_patch.part*"
       - ".github/workflows/apply-sabaibu-hardening.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "scripts/.sabaibu_patch.part*"
+      - ".github/workflows/apply-sabaibu-hardening.yml"
 
 permissions:
   contents: write
