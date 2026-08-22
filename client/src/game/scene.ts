@@ -180,13 +180,20 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
 
   const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview, options.levelPreview, options.balancePreviewLevel, options.variantPreviewLevel, options.milestoneBossPreviewLevel, options.milestoneRewardPreviewLevel, options.obstaclePreview, options.resultPreview, options.mode);
   scene.onBeforeRenderObservable.add(() => {
-    const delta = Math.min(0.05, scene.getEngine().getDeltaTime() / 1000);
+    const delta = Math.min(0.12, Math.max(0, scene.getEngine().getDeltaTime() / 1000));
     const forward = camera.target.subtract(camera.position);
     forward.y = 0;
     if (forward.lengthSquared() > 0.001) forward.normalize();
     const right = new Vector3(forward.z, 0, -forward.x);
     world.setCameraBasis(forward, right);
-    world.update(delta);
+    // Preserve simulation time after a dropped mobile frame without allowing
+    // a single oversized step to tunnel through collisions.
+    let remaining = delta;
+    while (remaining > 0) {
+      const step = Math.min(0.05, remaining);
+      world.update(step);
+      remaining -= step;
+    }
     const framing = world.getFramingState();
     const profile = getViewportCameraProfile(scene.getEngine().getRenderWidth(), scene.getEngine().getRenderHeight());
     const baseRadius = Math.min(40, 30 + Math.min(10, framing.nearbyEnemyCount * 0.38)) * profile.radiusScale;
