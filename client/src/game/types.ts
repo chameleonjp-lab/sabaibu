@@ -6,6 +6,25 @@
 export type GamePhase = "playing" | "paused" | "upgrade" | "bossReward" | "gameover";
 export type GameMode = "normal" | "endless";
 export type GameOutcome = "running" | "clear" | "failed" | "retired";
+export type GameSoundCue =
+  | "start"
+  | "attack"
+  | "kill"
+  | "xp"
+  | "level-up"
+  | "warning"
+  | "perfect"
+  | "dodge"
+  | "boss"
+  | "damage"
+  | "low-health"
+  | "clear"
+  | "gameover"
+  | "choice";
+export interface SoundEvent {
+  id: number;
+  cue: GameSoundCue;
+}
 export type BossRewardId = "repair" | "amplify" | "evolve";
 export type EvolutionId =
   | "vector-laser"
@@ -85,6 +104,7 @@ export interface GameSnapshot {
   maxHealth: number;
   damageFlash: number;
   dangerSignal: number;
+  soundEvents: SoundEvent[];
   xp: number;
   xpNeeded: number;
   level: number;

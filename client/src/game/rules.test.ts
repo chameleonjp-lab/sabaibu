@@ -10,6 +10,7 @@ import {
   DODGE_PERFECT_WINDOW_SECONDS,
   EVOLUTION_RECIPES,
   NORMAL_BOSS_TIMINGS,
+  NORMAL_FINAL_BOSS_HP_MULTIPLIER,
   NORMAL_MAX_ENEMIES,
   NORMAL_MAX_ENEMIES_PER_SECOND,
   NORMAL_TARGET_SECONDS,
@@ -29,6 +30,7 @@ describe("normal-mode rules", () => {
   it("keeps the normal target and scheduled boss timings fixed", () => {
     expect(NORMAL_TARGET_SECONDS).toBe(600);
     expect(NORMAL_BOSS_TIMINGS).toEqual([180, 360, 555]);
+    expect(NORMAL_FINAL_BOSS_HP_MULTIPLIER).toBe(12);
     expect(isNormalTargetReached(599.999)).toBe(false);
     expect(isNormalTargetReached(600)).toBe(true);
     expect(isObjectiveComplete("endless", 600)).toBe(false);

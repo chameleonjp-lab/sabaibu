@@ -9,7 +9,7 @@
     "start": "NODE_ENV=production node dist/index.js",
     "preview": "vite preview --host",
     "check": "tsc --noEmit",
-    "test:rules": "vitest run client/src/game/rules.test.ts client/src/hooks/useGameRanking.test.ts",
+    "test:rules": "vitest run client/src/game/rules.test.ts client/src/game/GameWorld.runtime.test.ts client/src/hooks/useGameRanking.test.ts",
     "format": "prettier --write ."
   },
   "dependencies": {

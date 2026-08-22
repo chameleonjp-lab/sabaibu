@@ -12,7 +12,7 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import type { Scene } from "@babylonjs/core/scene";
 import { GAME_ASSETS } from "./assets";
 import { ARENA_OBSTACLES, PLAYER_OBSTACLE_COLLISION_RADIUS } from "./arena";
-import { MODULE_UPGRADES, STANDARD_UPGRADES, UPGRADE_CATALOG, type AttackId, type AttackStatus, type BossRewardId, type EvolutionId, type GameMode, type GameOutcome, type GamePhase, type GameSnapshot, type ModuleId, type UpgradeId, type UpgradeOption } from "./types";
+import { MODULE_UPGRADES, STANDARD_UPGRADES, UPGRADE_CATALOG, type AttackId, type AttackStatus, type BossRewardId, type EvolutionId, type GameMode, type GameOutcome, type GamePhase, type GameSnapshot, type GameSoundCue, type ModuleId, type SoundEvent, type UpgradeId, type UpgradeOption } from "./types";
 import {
   ATTACK_SLOT_LIMIT,
   COMBO_WINDOW_SECONDS,
@@ -22,6 +22,7 @@ import {
   DODGE_PERFECT_WINDOW_SECONDS,
   EVOLUTION_RECIPES,
   NORMAL_BOSS_TIMINGS,
+  NORMAL_FINAL_BOSS_HP_MULTIPLIER,
   NORMAL_MAX_ENEMIES,
   NORMAL_MAX_ENEMIES_PER_SECOND,
   NORMAL_TARGET_SECONDS,
@@ -65,7 +66,7 @@ type BossAction = "none" | "shockwave" | "charge" | "artillery" | "barrage";
 type StrikerAction = "none" | "windup" | "dash";
 type PlayerDamageSource = "idle-needle" | "contact" | "variant-pulse" | "striker-dash" | "bulwark-barrage" | "bulwark-shockwave" | "bulwark-artillery" | "bulwark-charge" | "bulwark-destruction";
 type PlayerDamageResult = "damaged" | "perfect" | "blocked";
-type Enemy = { mesh: AbstractMesh; kind: EnemyKind; hp: number; maxHp: number; speed: number; scale: number; contactDamage: number; xpValue: number; hitRadius: number; lastDamagedBy?: AttackId; highVariant?: HighVariantId; milestoneBoss?: boolean; missionBossStage?: 1 | 2 | 3; milestoneCrown?: AbstractMesh; variantTimer: number; variantBurst: number; variantAura?: AbstractMesh; healthFill?: AbstractMesh; hitFlash: number; orbitCooldown: number; cryoTime: number; corrosionTime: number; corrosionStacks: number; corrosionTick: number; corrosionMark?: AbstractMesh; enteringContainment: boolean; strikerAction: StrikerAction; strikerTimer: number; strikerCooldown: number; strikerVector: Vector3; strikerDashHit: boolean; strikerMarker?: AbstractMesh; bossAction: BossAction; bossTimer: number; bossCooldown: number; bossTarget: Vector3; bossVector: Vector3; bossChargeHit: boolean; bossBursts: number; bossEnraged: boolean; bossMarker?: AbstractMesh; vulnerableTime: number; summonTimer: number; lastTargetedAt: number };
+type Enemy = { mesh: AbstractMesh; kind: EnemyKind; hp: number; maxHp: number; speed: number; scale: number; contactDamage: number; xpValue: number; hitRadius: number; lastDamagedBy?: AttackId; highVariant?: HighVariantId; milestoneBoss?: boolean; missionBossStage?: 1 | 2 | 3; milestoneCrown?: AbstractMesh; variantTimer: number; variantBurst: number; variantTelegraphTimer: number; variantTelegraph?: AbstractMesh; variantAura?: AbstractMesh; healthFill?: AbstractMesh; hitFlash: number; orbitCooldown: number; cryoTime: number; corrosionTime: number; corrosionStacks: number; corrosionTick: number; corrosionMark?: AbstractMesh; enteringContainment: boolean; strikerAction: StrikerAction; strikerTimer: number; strikerCooldown: number; strikerVector: Vector3; strikerDashHit: boolean; strikerPerfectDodge: boolean; strikerMarker?: AbstractMesh; bossAction: BossAction; bossTimer: number; bossCooldown: number; bossTarget: Vector3; bossVector: Vector3; bossChargeHit: boolean; bossBursts: number; bossEnraged: boolean; bossMarker?: AbstractMesh; vulnerableTime: number; summonTimer: number; lastTargetedAt: number };
 type Projectile = { mesh: AbstractMesh; velocity: Vector3; damage: number; life: number; hitRadius: number; source: AttackId };
 type CombatStat = { damage: number; kills: number };
 type Gem = { mesh: AbstractMesh; value: number };
@@ -121,6 +122,9 @@ const MAX_HARPOONS = 32;
 const MAX_CLUSTER_SHARDS = 128;
 const PERFECT_DODGE_SCORE = 200;
 const PERFECT_DODGE_BOOST_SECONDS = 2.5;
+const VARIANT_TELEGRAPH_SECONDS = 0.62;
+const PROJECTILE_SOUND_MIN_INTERVAL = 0.18;
+const SNAPSHOT_INTERVAL_SECONDS = 0.05;
 const NORMAL_BOSS_LABELS = ["", "侵入母艦", "突撃指揮機", "重装破城機"] as const;
 const EVOLUTION_REPRESENTATIVES: Record<EvolutionId, ModuleId> = {
   "vector-laser": "vector",
@@ -262,6 +266,9 @@ export class GameWorld {
   private debugProjectileCollisions = 0;
   private combatStats: Record<AttackId, CombatStat> = this.createCombatStats();
   private score = 0;
+  private soundEventSequence = 0;
+  private soundEvents: SoundEvent[] = [];
+  private lastAttackSoundElapsed = Number.NEGATIVE_INFINITY;
   private combo = 0;
   private comboTimer = 0;
   private maxCombo = 0;
@@ -478,7 +485,10 @@ export class GameWorld {
       this.comboTimer = Math.max(0, this.comboTimer - safeDelta);
       if (this.comboTimer <= 0) this.combo = 0;
     }
-    this.updateNormalMission();
+    // Schedule encounters before the frame, but resolve the 10:00 timeout
+    // after this frame's attacks. A final-boss hit at exactly 09:59.98 must
+    // be allowed to win before the failure check runs.
+    this.updateNormalMission(false);
     if (this.phase !== "playing") return;
     const playerMoved = this.updatePlayer(safeDelta);
     this.updateDamageWarning(safeDelta);
@@ -501,9 +511,11 @@ export class GameWorld {
     this.updateGems(safeDelta);
     if (this.phase !== "playing") return;
     this.updateRecoveryItems(safeDelta);
+    this.updateNormalMission(true);
+    if (this.phase !== "playing") return;
     this.emitTimer -= safeDelta;
     if (this.emitTimer <= 0) {
-      this.emitTimer = 0.1;
+      this.emitTimer = SNAPSHOT_INTERVAL_SECONDS;
       this.emitSnapshot();
     }
   }
@@ -535,20 +547,22 @@ export class GameWorld {
   requestDodge() {
     if (this.phase !== "playing" || this.dodgeCooldown > 0) return;
     const dodgeOrigin = this.player.position.clone();
-    const perfectlyTimed = this.hasImminentDodgeThreat(dodgeOrigin);
+    const hadImminentThreat = this.hasImminentDodgeThreat(dodgeOrigin);
+    const threatenedBoss = this.getImminentDodgeBoss(dodgeOrigin);
     let direction = this.getInputDirection();
     if (direction.lengthSquared() < 0.01) direction = this.lastMoveDirection.clone();
     if (direction.lengthSquared() < 0.01) direction.set(Math.sin(this.player.rotation.y), 0, Math.cos(this.player.rotation.y));
     direction.normalize();
-    this.player.position.addInPlace(direction.scale(DODGE_DISTANCE));
-    this.resolvePlayerObstacleCollisions();
+    this.movePlayerBy(direction.scale(DODGE_DISTANCE));
     this.clampToArena(this.player.position, PLAYER_SAFE_BOUND);
     this.lastMoveDirection.copyFrom(direction);
     this.player.rotation.y = Math.atan2(direction.x, direction.z);
     this.dodgeCooldown = DODGE_COOLDOWN_SECONDS;
     this.dodgeInvulnerable = DODGE_INVULNERABILITY_SECONDS;
     this.dodgePerfectRegistered = false;
-    if (perfectlyTimed) this.registerPerfectDodge();
+    const perfectlyTimed = hadImminentThreat && !this.hasImminentDodgeThreat(this.player.position);
+    if (perfectlyTimed) this.registerPerfectDodge(threatenedBoss);
+    this.queueSound("dodge");
     this.emitSnapshot();
   }
 
@@ -564,6 +578,8 @@ export class GameWorld {
       this.activateEvolution(this.pendingEvolution);
     }
     this.pendingEvolution = undefined;
+    this.activeEncounterLabel = this.mode === "normal" ? "通常侵入" : "戦線再編";
+    this.encounterTimer = Math.max(this.encounterTimer, 6);
     this.phase = "playing";
     this.emitSnapshot();
   }
@@ -637,7 +653,7 @@ export class GameWorld {
 
   restart() {
     [...this.idleNeedles].forEach((needle) => { needle.mesh.dispose(); needle.marker.dispose(); });
-    [...this.enemies].forEach((enemy) => { enemy.strikerMarker?.dispose(); enemy.bossMarker?.dispose(); enemy.milestoneCrown?.dispose(); enemy.mesh.dispose(); });
+    [...this.enemies].forEach((enemy) => { enemy.variantAura?.dispose(); enemy.variantTelegraph?.dispose(); enemy.strikerMarker?.dispose(); enemy.bossMarker?.dispose(); enemy.milestoneCrown?.dispose(); enemy.mesh.dispose(); });
     [...this.projectiles].forEach((projectile) => projectile.mesh.dispose());
     [...this.gems].forEach((gem) => gem.mesh.dispose());
     [...this.recoveryItems].forEach((item) => item.mesh.dispose());
@@ -784,6 +800,9 @@ export class GameWorld {
     this.idleSeconds = 0;
     this.idleStrikeCooldown = 0;
     this.score = 0;
+    this.soundEventSequence = 0;
+    this.soundEvents.length = 0;
+    this.lastAttackSoundElapsed = Number.NEGATIVE_INFINITY;
     this.combo = 0;
     this.comboTimer = 0;
     this.maxCombo = 0;
@@ -834,7 +853,7 @@ export class GameWorld {
     [...this.harpoons].forEach((harpoon) => { harpoon.mesh.dispose(); harpoon.cable.dispose(); });
     [...this.clusterCores].forEach((core) => core.mesh.dispose());
     [...this.clusterShards].forEach((shard) => shard.mesh.dispose());
-    [...this.enemies].forEach((enemy) => { enemy.variantAura?.dispose(); enemy.strikerMarker?.dispose(); enemy.bossMarker?.dispose(); enemy.mesh.dispose(); });
+    [...this.enemies].forEach((enemy) => { enemy.variantAura?.dispose(); enemy.variantTelegraph?.dispose(); enemy.strikerMarker?.dispose(); enemy.bossMarker?.dispose(); enemy.mesh.dispose(); });
     this.enemyMaterial.dispose();
     this.strikerMaterial.dispose();
     this.bulwarkMaterial.dispose();
@@ -856,7 +875,7 @@ export class GameWorld {
     if (moved) {
       move.normalize();
       this.lastMoveDirection.copyFrom(move);
-      this.player.position.addInPlace(move.scale(this.playerSpeed * delta));
+      this.movePlayerBy(move.scale(this.playerSpeed * delta));
       this.player.rotation.y = Math.atan2(move.x, move.z);
     }
     this.player.position.x = Math.max(-PLAYER_SAFE_BOUND, Math.min(PLAYER_SAFE_BOUND, this.player.position.x));
@@ -903,6 +922,7 @@ export class GameWorld {
 
   private launchIdleNeedle(target: Vector3, fallDuration = 2) {
     this.dangerSignal += 1;
+    this.queueSound("warning");
     const marker = MeshBuilder.CreateTorus("idle-needle-warning", { diameter: 2.05, thickness: 0.095, tessellation: 28 }, this.scene);
     marker.position.copyFrom(target);
     marker.position.y = 0.12;
@@ -917,6 +937,74 @@ export class GameWorld {
     position.x = Math.max(-bound, Math.min(bound, position.x));
     position.z = Math.max(-bound, Math.min(bound, position.z));
     return position;
+  }
+
+  /** Move through a swept path so a dodge cannot teleport through a block. */
+  private movePlayerBy(displacement: Vector3) {
+    const start = this.player.position.clone();
+    const target = this.clampToArena(start.add(displacement), PLAYER_SAFE_BOUND);
+    if (!this.segmentHitsObstacle(start, target)) {
+      this.player.position.copyFrom(target);
+      return;
+    }
+
+    // If the diagonal path is blocked, preserve the familiar top-down
+    // "slide along the wall" behavior one axis at a time, still swept.
+    const xTarget = this.clampToArena(this.player.position.clone().add(new Vector3(displacement.x, 0, 0)), PLAYER_SAFE_BOUND);
+    const xSafe = this.sweepToLastSafePosition(this.player.position, xTarget);
+    this.player.position.copyFrom(xSafe);
+    const zTarget = this.clampToArena(this.player.position.clone().add(new Vector3(0, 0, displacement.z)), PLAYER_SAFE_BOUND);
+    this.player.position.copyFrom(this.sweepToLastSafePosition(this.player.position, zTarget));
+    this.resolvePlayerObstacleCollisions();
+  }
+
+  private segmentHitsObstacle(start: Vector3, target: Vector3) {
+    const distance = Math.hypot(target.x - start.x, target.z - start.z);
+    const steps = Math.max(1, Math.ceil(distance / 0.12));
+    for (let index = 1; index <= steps; index += 1) {
+      const progress = index / steps;
+      const position = Vector3.Lerp(start, target, progress);
+      if (this.isPlayerPositionBlocked(position)) return true;
+    }
+    return false;
+  }
+
+  private sweepToLastSafePosition(start: Vector3, target: Vector3) {
+    const distance = Math.hypot(target.x - start.x, target.z - start.z);
+    const steps = Math.max(1, Math.ceil(distance / 0.12));
+    let previousProgress = 0;
+    for (let index = 1; index <= steps; index += 1) {
+      const progress = index / steps;
+      const position = Vector3.Lerp(start, target, progress);
+      if (!this.isPlayerPositionBlocked(position)) {
+        previousProgress = progress;
+        continue;
+      }
+      let low = previousProgress;
+      let high = progress;
+      for (let iteration = 0; iteration < 8; iteration += 1) {
+        const middle = (low + high) / 2;
+        if (this.isPlayerPositionBlocked(Vector3.Lerp(start, target, middle))) high = middle;
+        else low = middle;
+      }
+      return Vector3.Lerp(start, target, low);
+    }
+    return target;
+  }
+
+  private isPlayerPositionBlocked(position: Vector3) {
+    const radius = PLAYER_OBSTACLE_COLLISION_RADIUS;
+    return ARENA_OBSTACLES.some((obstacle) => {
+      const minX = obstacle.x - obstacle.width / 2;
+      const maxX = obstacle.x + obstacle.width / 2;
+      const minZ = obstacle.z - obstacle.depth / 2;
+      const maxZ = obstacle.z + obstacle.depth / 2;
+      const nearestX = Math.max(minX, Math.min(maxX, position.x));
+      const nearestZ = Math.max(minZ, Math.min(maxZ, position.z));
+      const dx = position.x - nearestX;
+      const dz = position.z - nearestZ;
+      return dx * dx + dz * dz < radius * radius;
+    });
   }
 
   private resolvePlayerObstacleCollisions() {
@@ -1113,9 +1201,9 @@ export class GameWorld {
     this.resolvePlayerObstacleCollisions();
   }
 
-  private updateNormalMission() {
+  private updateNormalMission(resolveTimeout = true) {
     if (this.mode !== "normal" || this.outcome !== "running") return;
-    if (isNormalTargetReached(this.elapsed)) {
+    if (resolveTimeout && isNormalTargetReached(this.elapsed)) {
       this.finishRun("failed", "制限時間内に最終ボスを撃破できず");
       return;
     }
@@ -1138,7 +1226,10 @@ export class GameWorld {
     const baseHp = 14 + Math.floor(this.elapsed / 25) * 4;
     boss.milestoneBoss = true;
     boss.missionBossStage = stage;
-    boss.hp = baseHp * (stage === 3 ? 90 : 40);
+    // The final boss has only the 09:15–10:00 window. A 90x multiplier made
+    // the guaranteed Rail-only damage mathematically unable to clear Normal;
+    // 12x keeps the fight meaningful while leaving room for missed shots.
+    boss.hp = baseHp * (stage === 3 ? NORMAL_FINAL_BOSS_HP_MULTIPLIER : 40);
     boss.maxHp = boss.hp;
     boss.scale *= stage === 3 ? 2.25 : 1.95;
     boss.mesh.scaling.setAll(boss.scale);
@@ -1157,6 +1248,7 @@ export class GameWorld {
     boss.milestoneCrown = crown;
     this.activeMissionBossStage = stage;
     this.activeEncounterLabel = `${NORMAL_BOSS_LABELS[stage]}戦`;
+    this.queueSound("boss");
     const arrival = MeshBuilder.CreateTorus("mission-boss-arrival", { diameter: 2.8, thickness: 0.15, tessellation: 32 }, this.scene);
     arrival.position.copyFrom(boss.mesh.position);
     arrival.position.y = 0.18;
@@ -1203,6 +1295,7 @@ export class GameWorld {
       if (enemy.milestoneBoss) continue;
       enemy.corrosionMark?.dispose();
       enemy.variantAura?.dispose();
+      enemy.variantTelegraph?.dispose();
       enemy.strikerMarker?.dispose();
       enemy.bossMarker?.dispose();
       enemy.mesh.dispose();
@@ -1254,6 +1347,7 @@ export class GameWorld {
     announcement.position.y = 0.18;
     announcement.material = this.projectileMaterial;
     this.shockwaves.push({ mesh: announcement, life: 0.72, maxLife: 0.72 });
+    this.queueSound("boss");
   }
 
   private getRecoverableDropPosition(position: Vector3) {
@@ -1388,7 +1482,7 @@ export class GameWorld {
       this.addVariantSilhouette(body, variant!.trait, profile.material);
     }
     const healthFill = kind === "bulwark" ? this.createBossHealthBar(body) : undefined;
-    this.enemies.push({ mesh: body, kind, hp: profile.hp, maxHp: profile.hp, speed: profile.speed, scale: profile.scale, contactDamage: profile.contactDamage, xpValue: profile.xpValue, hitRadius, highVariant, variantTimer: 0.8 + Math.random() * 0.75, variantBurst: 0, variantAura, healthFill, hitFlash: 0, orbitCooldown: 0, cryoTime: 0, corrosionTime: 0, corrosionStacks: 0, corrosionTick: 0, enteringContainment: true, strikerAction: "none", strikerTimer: 0, strikerCooldown: kind === "striker" ? 1.8 + Math.random() * 1.4 : 0, strikerVector: Vector3.Zero(), strikerDashHit: false, bossAction: "none", bossTimer: 0, bossCooldown: kind === "bulwark" ? 2.6 + Math.random() * 1.1 : 0, bossTarget: Vector3.Zero(), bossVector: Vector3.Zero(), bossChargeHit: false, bossBursts: 0, bossEnraged: false, vulnerableTime: 0, summonTimer: Number.POSITIVE_INFINITY, lastTargetedAt: -1 });
+    this.enemies.push({ mesh: body, kind, hp: profile.hp, maxHp: profile.hp, speed: profile.speed, scale: profile.scale, contactDamage: profile.contactDamage, xpValue: profile.xpValue, hitRadius, highVariant, variantTimer: 0.8 + Math.random() * 0.75, variantBurst: 0, variantTelegraphTimer: 0, variantTelegraph: undefined, variantAura, healthFill, hitFlash: 0, orbitCooldown: 0, cryoTime: 0, corrosionTime: 0, corrosionStacks: 0, corrosionTick: 0, enteringContainment: true, strikerAction: "none", strikerTimer: 0, strikerCooldown: kind === "striker" ? 1.8 + Math.random() * 1.4 : 0, strikerVector: Vector3.Zero(), strikerDashHit: false, strikerPerfectDodge: false, bossAction: "none", bossTimer: 0, bossCooldown: kind === "bulwark" ? 2.6 + Math.random() * 1.1 : 0, bossTarget: Vector3.Zero(), bossVector: Vector3.Zero(), bossChargeHit: false, bossBursts: 0, bossEnraged: false, bossMarker: undefined, vulnerableTime: 0, summonTimer: Number.POSITIVE_INFINITY, lastTargetedAt: -1 });
     this.createWallBreach(ingress.breach, profile.material);
   }
 
@@ -1462,6 +1556,7 @@ export class GameWorld {
     for (let i = this.projectiles.length - 1; i >= 0; i -= 1) {
       const projectile = this.projectiles[i];
       projectile.life -= delta;
+      const previousPosition = projectile.mesh.position.clone();
       projectile.mesh.position.addInPlace(projectile.velocity.scale(delta));
       if (projectile.life <= 0) {
         projectile.mesh.dispose();
@@ -1470,7 +1565,7 @@ export class GameWorld {
       }
       const enemyIndex = this.enemies.findIndex((enemy) => {
         if (!this.isCombatTarget(enemy)) return false;
-        return this.isEnemyWithinRadius(enemy, projectile.mesh.position, projectile.hitRadius);
+        return this.isEnemyHitByTrace(enemy, previousPosition, projectile.mesh.position, projectile.hitRadius);
       });
       if (enemyIndex >= 0) {
         const enemy = this.enemies[enemyIndex];
@@ -1600,6 +1695,17 @@ export class GameWorld {
 
   private isSimulationActive() {
     return this.phase === "playing" && !this.runFinalized;
+  }
+
+  /**
+   * Keep sound events on the simulation timeline instead of inferring them
+   * from 100ms HUD snapshots. The UI can safely process every sequence id,
+   * even when React batches several snapshots into one render.
+   */
+  private queueSound(cue: GameSoundCue) {
+    this.soundEventSequence += 1;
+    this.soundEvents.push({ id: this.soundEventSequence, cue });
+    if (this.soundEvents.length > 96) this.soundEvents.splice(0, this.soundEvents.length - 96);
   }
 
   private getEligibleEvolution() {
@@ -2213,7 +2319,7 @@ export class GameWorld {
       mine.mesh.rotation.y += delta * 4;
       const tier = this.moduleTiers.mine;
       const triggerRadius = 1.45 + tier * 0.18;
-      const triggered = mine.armed <= 0 && this.enemies.some((enemy) => this.isEnemyWithinRadius(enemy, mine.mesh.position, triggerRadius));
+      const triggered = mine.armed <= 0 && this.enemies.some((enemy) => this.isCombatTarget(enemy) && this.isEnemyWithinRadius(enemy, mine.mesh.position, triggerRadius));
       if (mine.life > 0 && !triggered) continue;
       this.detonateMine(mine);
       this.mines.splice(index, 1);
@@ -2962,6 +3068,10 @@ export class GameWorld {
     const actualDamage = Math.max(0, Math.min(enemy.hp, amplifiedDamage));
     const bossHealthStepBefore = enemy.milestoneBoss ? Math.floor((1 - enemy.hp / Math.max(1, enemy.maxHp)) * 10) : 0;
     this.recordDamage(source, actualDamage);
+    if (this.elapsed - this.lastAttackSoundElapsed >= PROJECTILE_SOUND_MIN_INTERVAL) {
+      this.lastAttackSoundElapsed = this.elapsed;
+      this.queueSound("attack");
+    }
     enemy.lastDamagedBy = source;
     enemy.hp -= amplifiedDamage;
     if (enemy.milestoneBoss) {
@@ -3173,7 +3283,8 @@ export class GameWorld {
       enemy.hitFlash -= delta;
       enemy.mesh.scaling.setAll(enemy.scale * (enemy.hitFlash > 0 ? 1.18 : 1));
       const enemyContactRadius = this.getEnemyHitRadius(enemy);
-      if (!decoy && distance < PLAYER_RING_RADIUS + enemyContactRadius && this.damageTimer <= 0) {
+      const contactDistance = Vector3.Distance(this.player.position, enemy.mesh.position);
+      if (!decoy && contactDistance < PLAYER_RING_RADIUS + enemyContactRadius && this.damageTimer <= 0) {
         this.damagePlayer(Math.min(9, enemy.contactDamage + Math.floor(this.elapsed / 70)), 0.6, "contact");
         if (!this.isSimulationActive()) return;
       }
@@ -3214,8 +3325,27 @@ export class GameWorld {
       enemy.variantAura.scaling.setAll(0.9 + Math.sin(this.elapsed * (5 + enemy.scale) + enemy.scale) * 0.1);
     }
     if (config.trait === "drift") enemy.mesh.position.y = 0.8 + Math.sin(this.elapsed * 4.2 + enemy.scale * 3) * 0.18;
-    if (enemy.variantTimer > 0) return config.trait === "surge" && enemy.variantBurst > 0 ? 2.1 : config.trait === "skirmish" && enemy.variantBurst > 0 ? 1.65 : config.trait === "swarm" ? 1.24 : 1;
-    enemy.variantTimer = config.trait === "pulse" ? 1.35 : config.trait === "siege" ? 1.75 : config.trait === "armor" ? 2.25 : 1.25 + Math.random() * 0.75;
+    let resolvingTelegraph = false;
+    if (enemy.variantTelegraphTimer > 0) {
+      enemy.variantTelegraphTimer -= delta;
+      if (enemy.variantTelegraph) {
+        enemy.variantTelegraph.position.copyFrom(enemy.mesh.position);
+        enemy.variantTelegraph.position.y = 0.14;
+      }
+      enemy.variantTelegraph?.scaling.setAll(0.82 + Math.sin(this.elapsed * 22) * 0.16);
+      if (enemy.variantTelegraphTimer > 0) return 1;
+      enemy.variantTelegraph?.dispose();
+      enemy.variantTelegraph = undefined;
+      resolvingTelegraph = true;
+    }
+    if (!resolvingTelegraph && enemy.variantTimer > 0) return config.trait === "surge" && enemy.variantBurst > 0 ? 2.1 : config.trait === "skirmish" && enemy.variantBurst > 0 ? 1.65 : config.trait === "swarm" ? 1.24 : 1;
+    if (!resolvingTelegraph) {
+      enemy.variantTimer = config.trait === "pulse" ? 1.35 : config.trait === "siege" ? 1.75 : config.trait === "armor" ? 2.25 : 1.25 + Math.random() * 0.75;
+      enemy.variantTelegraphTimer = VARIANT_TELEGRAPH_SECONDS;
+      const diameter = config.trait === "pulse" ? (3.2 + enemy.scale * 1.1) * 2 : config.trait === "surge" || config.trait === "skirmish" ? 2.25 + enemy.scale : 2.7;
+      enemy.variantTelegraph = this.createVariantTelegraph(enemy, diameter);
+      return 1;
+    }
     if (config.trait === "surge" || config.trait === "skirmish") {
       enemy.variantBurst = config.trait === "surge" ? 0.46 : 0.68;
       return config.trait === "surge" ? 2.1 : 1.65;
@@ -3224,7 +3354,6 @@ export class GameWorld {
       const dx = this.player.position.x - enemy.mesh.position.x;
       const dz = this.player.position.z - enemy.mesh.position.z;
       const radius = 3.2 + enemy.scale * 1.1;
-      this.dangerSignal += 1;
       this.emitVariantPulse(enemy, radius, config.contactDamage);
       if (canThreatenPlayer && dx * dx + dz * dz <= radius * radius && this.damageTimer <= 0) this.damagePlayer(Math.min(10, config.contactDamage), 0.58, "variant-pulse");
     } else if (config.trait === "siege" || config.trait === "armor") {
@@ -3239,6 +3368,16 @@ export class GameWorld {
     wave.position.y = 0.14;
     wave.material = this.enemyThreatMaterial;
     this.shockwaves.push({ mesh: wave, life: damage > 0 ? 0.34 : 0.24, maxLife: damage > 0 ? 0.34 : 0.24 });
+  }
+
+  private createVariantTelegraph(enemy: Enemy, diameter: number) {
+    this.dangerSignal += 1;
+    this.queueSound("warning");
+    const marker = MeshBuilder.CreateTorus("variant-warning", { diameter, thickness: 0.095, tessellation: 28 }, this.scene);
+    marker.position.copyFrom(enemy.mesh.position);
+    marker.position.y = 0.14;
+    marker.material = this.enemyThreatMaterial;
+    return marker;
   }
 
   private updateStrikerAction(enemy: Enemy, distracted: boolean, delta: number) {
@@ -3256,6 +3395,7 @@ export class GameWorld {
       enemy.strikerTimer = enemy.milestoneBoss ? (enemy.bossEnraged ? 0.72 : 0.85) : 0.42;
       enemy.strikerVector.copyFrom(vector);
       enemy.strikerDashHit = false;
+      enemy.strikerPerfectDodge = false;
       enemy.strikerMarker = this.createStrikerDashWarning(enemy.mesh.position, enemy.mesh.position.add(vector.scale(Math.min(6.2, distance - 0.4))));
       return true;
     }
@@ -3276,7 +3416,11 @@ export class GameWorld {
     const strikerContactRadius = PLAYER_RING_RADIUS + this.getEnemyHitRadius(enemy);
     if (!enemy.strikerDashHit && Vector3.DistanceSquared(this.player.position, enemy.mesh.position) < strikerContactRadius * strikerContactRadius) {
       const hitResult = this.damagePlayer(8 + Math.floor(this.elapsed / 105), 0.45, "striker-dash");
-      enemy.strikerDashHit = hitResult === "damaged";
+      // Perfect Dodge is still a successful dash avoidance. Latching it here
+      // prevents the dash from applying a delayed second hit after the 0.28s
+      // invulnerability window expires.
+      enemy.strikerDashHit = hitResult === "damaged" || hitResult === "perfect";
+      enemy.strikerPerfectDodge = hitResult === "perfect";
     }
     if (enemy.strikerTimer > 0) return true;
     const dashWave = MeshBuilder.CreateTorus("striker-dash-end", { diameter: 0.4, thickness: 0.065, tessellation: 20 }, this.scene);
@@ -3286,12 +3430,13 @@ export class GameWorld {
     this.shockwaves.push({ mesh: dashWave, life: 0.2, maxLife: 0.2 });
     enemy.strikerAction = "none";
     enemy.strikerCooldown = (enemy.bossEnraged ? 2.15 : 3.1) + Math.random() * 1.3;
-    if (enemy.milestoneBoss && !enemy.strikerDashHit) enemy.vulnerableTime = Math.max(enemy.vulnerableTime, 1.8);
+    if (enemy.milestoneBoss && enemy.strikerPerfectDodge) enemy.vulnerableTime = Math.max(enemy.vulnerableTime, 1.8);
     return true;
   }
 
   private createStrikerDashWarning(start: Vector3, end: Vector3) {
     this.dangerSignal += 1;
+    this.queueSound("warning");
     const direction = end.subtract(start);
     const length = direction.length();
     const marker = MeshBuilder.CreateBox("striker-dash-warning", { width: 0.12, height: 0.055, depth: Math.max(0.12, length) }, this.scene);
@@ -3434,6 +3579,7 @@ export class GameWorld {
 
   private createBossWarning(position: Vector3, diameter: number) {
     this.dangerSignal += 1;
+    this.queueSound("warning");
     const marker = MeshBuilder.CreateTorus("bulwark-warning", { diameter, thickness: 0.1, tessellation: 28 }, this.scene);
     marker.position.copyFrom(position);
     marker.position.y = 0.14;
@@ -3451,50 +3597,54 @@ export class GameWorld {
   }
 
   private hasImminentDodgeThreat(origin: Vector3) {
-    for (const enemy of this.enemies) {
-      if (!this.isInsideContainment(enemy)) continue;
-      const contactRadius = PLAYER_RING_RADIUS + this.getEnemyHitRadius(enemy) + 0.38;
-      const distanceSquared = Vector3.DistanceSquared(origin, enemy.mesh.position);
+    return this.enemies.some((enemy) => this.isEnemyDodgeThreatened(enemy, origin))
+      || this.idleNeedles.some((needle) => needle.life <= DODGE_PERFECT_WINDOW_SECONDS && Vector3.DistanceSquared(origin, needle.target) <= 1.05 * 1.05);
+  }
 
-      if (enemy.strikerAction === "dash" || (enemy.strikerAction === "windup" && enemy.strikerTimer <= DODGE_PERFECT_WINDOW_SECONDS)) {
-        const dashEnd = enemy.mesh.position.add(enemy.strikerVector.scale(8));
-        if (this.distanceToSegmentSquared(origin, enemy.mesh.position, dashEnd) <= contactRadius * contactRadius) return true;
-      }
+  private getImminentDodgeBoss(origin: Vector3) {
+    return this.enemies.find((enemy) => enemy.milestoneBoss && this.isEnemyDodgeThreatened(enemy, origin));
+  }
 
-      if (enemy.bossAction !== "none" && enemy.bossTimer <= DODGE_PERFECT_WINDOW_SECONDS) {
-        if (enemy.bossAction === "shockwave" && distanceSquared <= 3.8 * 3.8) return true;
-        if (enemy.bossAction === "artillery" && Vector3.DistanceSquared(origin, enemy.bossTarget) <= 3.15 * 3.15) return true;
-        if (enemy.bossAction === "barrage" && Vector3.DistanceSquared(origin, enemy.bossTarget) <= 1.85 * 1.85) return true;
-        if (enemy.bossAction === "charge") {
-          const chargeEnd = enemy.bossTimer > 0 ? enemy.bossTarget : enemy.mesh.position.add(enemy.bossVector.scale(8));
-          if (this.distanceToSegmentSquared(origin, enemy.mesh.position, chargeEnd) <= contactRadius * contactRadius) return true;
-        }
-      }
+  private isEnemyDodgeThreatened(enemy: Enemy, origin: Vector3) {
+    if (!this.isInsideContainment(enemy)) return false;
+    const contactRadius = PLAYER_RING_RADIUS + this.getEnemyHitRadius(enemy) + 0.38;
+    const distanceSquared = Vector3.DistanceSquared(origin, enemy.mesh.position);
 
-      if (enemy.highVariant && HIGH_VARIANTS[enemy.highVariant].trait === "pulse" && enemy.variantTimer <= DODGE_PERFECT_WINDOW_SECONDS) {
-        const pulseRadius = 3.2 + enemy.scale * 1.1;
-        if (distanceSquared <= pulseRadius * pulseRadius) return true;
+    if (enemy.strikerAction === "dash" || (enemy.strikerAction === "windup" && enemy.strikerTimer <= DODGE_PERFECT_WINDOW_SECONDS)) {
+      const dashEnd = enemy.mesh.position.add(enemy.strikerVector.scale(8));
+      if (this.distanceToSegmentSquared(origin, enemy.mesh.position, dashEnd) <= contactRadius * contactRadius) return true;
+    }
+
+    if (enemy.bossAction !== "none" && enemy.bossTimer <= DODGE_PERFECT_WINDOW_SECONDS) {
+      if (enemy.bossAction === "shockwave" && distanceSquared <= 3.8 * 3.8) return true;
+      if (enemy.bossAction === "artillery" && Vector3.DistanceSquared(origin, enemy.bossTarget) <= 3.15 * 3.15) return true;
+      if (enemy.bossAction === "barrage" && Vector3.DistanceSquared(origin, enemy.bossTarget) <= 1.85 * 1.85) return true;
+      if (enemy.bossAction === "charge") {
+        const chargeEnd = enemy.bossTimer > 0 ? enemy.bossTarget : enemy.mesh.position.add(enemy.bossVector.scale(8));
+        if (this.distanceToSegmentSquared(origin, enemy.mesh.position, chargeEnd) <= contactRadius * contactRadius) return true;
       }
     }
 
-    return this.idleNeedles.some((needle) => needle.life <= DODGE_PERFECT_WINDOW_SECONDS && Vector3.DistanceSquared(origin, needle.target) <= 1.05 * 1.05);
+    if (enemy.highVariant && HIGH_VARIANTS[enemy.highVariant].trait === "pulse" && enemy.variantTelegraphTimer > 0 && enemy.variantTelegraphTimer <= DODGE_PERFECT_WINDOW_SECONDS) {
+      const pulseRadius = 3.2 + enemy.scale * 1.1;
+      if (distanceSquared <= pulseRadius * pulseRadius) return true;
+    }
+    return false;
   }
 
-  private registerPerfectDodge() {
+  private registerPerfectDodge(threatenedBoss?: Enemy) {
     if (this.dodgePerfectRegistered) return;
     this.dodgePerfectRegistered = true;
     this.perfectDodges += 1;
     this.score += PERFECT_DODGE_SCORE;
     this.dodgeBoostSeconds = PERFECT_DODGE_BOOST_SECONDS;
-    const boss = this.enemies
-      .filter((enemy) => enemy.milestoneBoss)
-      .sort((left, right) => Vector3.DistanceSquared(left.mesh.position, this.player.position) - Vector3.DistanceSquared(right.mesh.position, this.player.position))[0];
-    if (boss) {
-      boss.vulnerableTime = Math.max(boss.vulnerableTime, 2.6);
-      boss.strikerAction = "none";
-      boss.strikerMarker?.dispose();
-      boss.strikerMarker = undefined;
-      this.finishBulwarkAction(boss, 2.8);
+    this.queueSound("perfect");
+    if (threatenedBoss && this.enemies.includes(threatenedBoss)) {
+      threatenedBoss.vulnerableTime = Math.max(threatenedBoss.vulnerableTime, 2.6);
+      threatenedBoss.strikerAction = "none";
+      threatenedBoss.strikerMarker?.dispose();
+      threatenedBoss.strikerMarker = undefined;
+      this.finishBulwarkAction(threatenedBoss, 2.8);
     }
     if (this.hasEvolution("nova-saw")) this.triggerNovaRing(Math.max(1, this.moduleTiers.nova));
   }
@@ -3503,19 +3653,22 @@ export class GameWorld {
     if (this.damageTimer > 0 || this.phase !== "playing") return "blocked";
     if (this.dodgeInvulnerable > 0) {
       if (!this.dodgePerfectRegistered) {
-        this.registerPerfectDodge();
+        this.registerPerfectDodge(this.getImminentDodgeBoss(this.player.position));
         this.emitSnapshot();
       }
       return "perfect";
     }
     const reactiveMitigation = this.moduleTiers.reactive > 0 ? Math.min(0.36, this.moduleTiers.reactive * 0.12) : 0;
     const finalDamage = Math.max(1, Math.ceil(amount * (1 - reactiveMitigation)));
+    const healthBefore = this.health;
     this.health = Math.max(0, this.health - finalDamage);
     this.damageTimer = cooldown;
     this.lastDamageSource = source;
     this.combo = 0;
     this.comboTimer = 0;
     this.damageFlash = Math.max(this.damageFlash, 0.46);
+    this.queueSound("damage");
+    if (this.health / Math.max(1, this.maxHealth) <= 0.25 && healthBefore / Math.max(1, this.maxHealth) > 0.25) this.queueSound("low-health");
     if (this.health <= 0) {
       this.finishRun("failed", DEATH_CAUSE_LABELS[source]);
       return "damaged";
@@ -3533,6 +3686,7 @@ export class GameWorld {
     this.deathCause = cause;
     if (outcome === "clear") this.score += this.level * 100 + Math.max(0, Math.ceil(this.health)) * 10;
     this.phase = "gameover";
+    this.queueSound(outcome === "clear" ? "clear" : "gameover");
     this.touchDirection.setAll(0);
     this.keys.clear();
     this.emitSnapshot();
@@ -3562,11 +3716,13 @@ export class GameWorld {
     this.enemies.splice(index, 1);
     enemy.corrosionMark?.dispose();
     enemy.variantAura?.dispose();
+    enemy.variantTelegraph?.dispose();
     enemy.milestoneCrown?.dispose();
     enemy.strikerMarker?.dispose();
     enemy.bossMarker?.dispose();
     enemy.mesh.dispose();
     this.kills += 1;
+    this.queueSound("kill");
     this.combo += 1;
     this.comboTimer = COMBO_WINDOW_SECONDS;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
@@ -3589,19 +3745,24 @@ export class GameWorld {
       if (playerInsideBlast) this.damagePlayer(10, 0.42, "bulwark-destruction");
       if (this.phase !== "playing") return true;
     }
-    if (this.gems.length >= MAX_GEM_MESHES) {
-      this.gems[0].value += enemy.xpValue;
-    } else {
-      const gem = MeshBuilder.CreateCylinder("energy-shard", { height: 0.42, diameterTop: 0.08, diameterBottom: 0.4, tessellation: 6 }, this.scene);
-      gem.position = new Vector3(dropPosition.x, 0.33, dropPosition.z);
-      gem.rotation.x = Math.PI;
-      gem.material = this.gemMaterial;
-      this.gems.push({ mesh: gem, value: enemy.xpValue });
+    const isFinalBoss = this.mode === "normal" && missionBossStage === 3;
+    // A clear result is shown immediately. Do not leave XP, recovery, or
+    // magnet meshes behind the result overlay for the final-boss kill.
+    if (!isFinalBoss) {
+      if (this.gems.length >= MAX_GEM_MESHES) {
+        this.gems[0].value += enemy.xpValue;
+      } else {
+        const gem = MeshBuilder.CreateCylinder("energy-shard", { height: 0.42, diameterTop: 0.08, diameterBottom: 0.4, tessellation: 6 }, this.scene);
+        gem.position = new Vector3(dropPosition.x, 0.33, dropPosition.z);
+        gem.rotation.x = Math.PI;
+        gem.material = this.gemMaterial;
+        this.gems.push({ mesh: gem, value: enemy.xpValue });
+      }
+      const shouldDropRecovery = this.health < this.maxHealth && Math.random() < this.getRecoveryDropChance();
+      if (shouldDropRecovery) this.createRecoveryItem(dropPosition);
+      const shouldDropMagnet = Math.random() < this.getMagnetDropChance();
+      if (shouldDropMagnet) this.createMagnetItem(this.getRecoverableDropPosition(dropPosition.add(new Vector3(0.5, 0, -0.5))));
     }
-    const shouldDropRecovery = this.health < this.maxHealth && Math.random() < this.getRecoveryDropChance();
-    if (shouldDropRecovery) this.createRecoveryItem(dropPosition);
-    const shouldDropMagnet = Math.random() < this.getMagnetDropChance();
-    if (shouldDropMagnet) this.createMagnetItem(this.getRecoverableDropPosition(dropPosition.add(new Vector3(0.5, 0, -0.5))));
     if (milestoneBoss) {
       this.bossesDefeated += 1;
       this.activeMissionBossStage = 0;
@@ -3623,6 +3784,7 @@ export class GameWorld {
     this.shockwaves.push({ mesh: reward, life: 0.68, maxLife: 0.68 });
     this.pendingEvolution = this.getEligibleEvolution()?.id;
     this.phase = "bossReward";
+    this.queueSound("choice");
     this.emitSnapshot();
   }
 
@@ -3726,6 +3888,7 @@ export class GameWorld {
   private addExperience(amount: number) {
     if (this.phase !== "playing" || amount <= 0) return;
     this.xp += amount;
+    this.queueSound("xp");
     this.tryAdvanceLevel();
   }
 
@@ -3737,6 +3900,8 @@ export class GameWorld {
     this.xpNeeded = this.getExperienceNeeded(this.level);
     this.phase = "upgrade";
     this.prepareUpgradeChoices();
+    this.queueSound("level-up");
+    this.queueSound("choice");
     this.emitSnapshot();
     return true;
   }
@@ -3864,6 +4029,7 @@ export class GameWorld {
       maxHealth: this.maxHealth,
       damageFlash: this.damageFlash,
       dangerSignal: this.dangerSignal,
+      soundEvents: this.soundEvents.slice(),
       xp: this.xp,
       xpNeeded: this.xpNeeded,
       level: this.level,
