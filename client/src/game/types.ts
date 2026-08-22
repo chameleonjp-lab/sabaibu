@@ -80,11 +80,25 @@ export interface BossRewardOption {
   enabled: boolean;
 }
 
+export interface ScoreBreakdown {
+  killPoints: number;
+  timePoints: number;
+  levelPoints: number;
+  hitPenalty: number;
+  damagePenalty: number;
+  positiveTotal: number;
+  penaltyTotal: number;
+  total: number;
+}
+
 export interface GameSnapshot {
   phase: GamePhase;
   mode: GameMode;
   outcome: GameOutcome;
   score: number;
+  damageHits: number;
+  damageTaken: number;
+  scoreBreakdown: ScoreBreakdown;
   combo: number;
   comboMultiplier: number;
   maxCombo: number;
@@ -126,39 +140,39 @@ export interface GameSnapshot {
 }
 
 export const STANDARD_UPGRADES: UpgradeOption[] = [
-  { id: "pulse", code: "武器-01", title: "レール増幅器", description: "最寄りの敵を狙う主砲の出力を強化する。", iconId: "pulse", category: "standard" },
-  { id: "scatter", code: "武器-24", title: "散弾アレイ", description: "移動方向へ放つ三連散弾を追加または強化する。", iconId: "scatter", category: "standard" },
-  { id: "orbit", code: "武器-52", title: "周回センチネル", description: "接近する敵を切り払う周回センチネルを追加または強化する。", iconId: "orbit", category: "standard" },
-  { id: "relay", code: "機能-24", title: "フラックス中継機", description: "射撃間隔と移動機構を最適化する。", iconId: "relay", category: "standard" },
-  { id: "barrier", code: "防御-09", title: "防壁コア", description: "最大耐久+8（上限200）、即時30回復。", iconId: "barrier", category: "standard" },
+  { id: "pulse", code: "武器-01", title: "レール増幅器", description: "いちばん近い敵を自動で狙う主砲を強くします。", iconId: "pulse", category: "standard" },
+  { id: "scatter", code: "武器-24", title: "散弾アレイ", description: "進んでいる方向へ3発の弾を同時に撃ちます。", iconId: "scatter", category: "standard" },
+  { id: "orbit", code: "武器-52", title: "周回センチネル", description: "自分の周りを回る刃が、近づいた敵を攻撃します。", iconId: "orbit", category: "standard" },
+  { id: "relay", code: "機能-24", title: "フラックス中継機", description: "主砲を速く撃てるようにし、移動も速くします。", iconId: "relay", category: "standard" },
+  { id: "barrier", code: "防御-09", title: "防壁コア", description: "最大体力を8増やし、その場で体力を30回復します。", iconId: "barrier", category: "standard" },
 ];
 
 export const MODULE_UPGRADES: UpgradeOption[] = [
-  { id: "vector", code: "補助-10", title: "ベクターランス", description: "ボス・高耐久敵を優先する高出力の槍弾を展開する。", iconId: "vector", category: "module" },
-  { id: "nova", code: "補助-14", title: "ノヴァリング", description: "周囲を掃討する全周衝撃波を展開する。", iconId: "nova", category: "module" },
-  { id: "mirage", code: "補助-21", title: "ミラージュドローン", description: "追尾射撃を行う幻影ドローンを増設する。", iconId: "mirage", category: "module" },
-  { id: "pylon", code: "補助-27", title: "セントリーパイロン", description: "短命の自動砲台を戦場へ設置する。", iconId: "pylon", category: "module" },
-  { id: "reactive", code: "補助-33", title: "リアクティブ装甲", description: "被弾を軽減し、周囲へ反撃波を放つ。", iconId: "reactive", category: "module" },
-  { id: "cryo", code: "補助-41", title: "クライオロック", description: "攻撃命中時に敵を減速・凍結させる。", iconId: "cryo", category: "module" },
-  { id: "ricochet", code: "補助-46", title: "跳弾バースト", description: "敵群の間を跳ね回る高密度の跳弾を射出する。", iconId: "ricochet", category: "module" },
-  { id: "gravity", code: "補助-54", title: "特異点弾", description: "敵を引き寄せて圧壊する重力コアを展開する。", iconId: "gravity", category: "module" },
-  { id: "decoy", code: "補助-63", title: "デコイビーコン", description: "敵を誘導し、最終的に爆発する囮ビーコンを設置する。", iconId: "decoy", category: "module" },
-  { id: "mortar", code: "補助-68", title: "迫撃アーク", description: "敵が最も密集する地点へ曲射弾を撃ち込み爆破する。", iconId: "mortar", category: "module" },
-  { id: "split", code: "補助-72", title: "プリズム分裂", description: "命中後に分裂し、周囲の敵へ追撃弾を放つ。", iconId: "split", category: "module" },
-  { id: "boomerang", code: "補助-79", title: "リターンブレード", description: "敵を切り裂きながら往復する回収ブレードを放つ。", iconId: "boomerang", category: "module" },
-  { id: "laser", code: "補助-83", title: "イオンランス", description: "ボス・高耐久敵を優先し、射線上を焼く貫通レーザー。", iconId: "laser", category: "module" },
-  { id: "chain", code: "補助-88", title: "アーク連鎖", description: "敵から敵へ伝播する高圧電撃連鎖を解き放つ。", iconId: "chain", category: "module" },
-  { id: "mine", code: "補助-94", title: "近接地雷", description: "移動した跡へ、敵が近づくと爆発する地雷を設置する。", iconId: "mine", category: "module" },
-  { id: "fan", code: "補助-97", title: "プリズム扇撃", description: "最寄りの敵群へ扇状に分岐する短射程ビームを掃射する。", iconId: "fan", category: "module" },
-  { id: "skyfall", code: "補助-101", title: "スカイフォール標識", description: "敵の密集地点へ上空から高出力の落雷を投下する。", iconId: "skyfall", category: "module" },
-  { id: "cleaver", code: "補助-106", title: "位相クリーヴァー", description: "敵群を横切る位相斬撃で広い射線を薙ぎ払う。", iconId: "cleaver", category: "module" },
-  { id: "needle", code: "補助-110", title: "ニードルレイン", description: "周囲の敵群へ高密度の針弾を降り注がせる。", iconId: "needle", category: "module" },
-  { id: "saw", code: "補助-114", title: "ソーハロ", description: "周囲を周回する回転鋸で接近する敵を切り刻む。", iconId: "saw", category: "module" },
-  { id: "harpoon", code: "補助-119", title: "チェーンハープーン", description: "ボス・高耐久敵を優先し、拘束して手前へ引き寄せる。", iconId: "harpoon", category: "module" },
-  { id: "thermal", code: "補助-123", title: "サーマルアーク", description: "熱線を敵群へ連鎖させ、最終点で過熱爆発を起こす。", iconId: "thermal", category: "module" },
-  { id: "sonic", code: "補助-127", title: "ソニックブレイカー", description: "前方扇形へ衝撃音波を放ち、敵群を押し返す。", iconId: "sonic", category: "module" },
-  { id: "cluster", code: "補助-132", title: "クラスターコア", description: "命中後に追尾子弾へ分裂する高密度コアを放つ。", iconId: "cluster", category: "module" },
-  { id: "corrosion", code: "補助-137", title: "腐食刻印", description: "命中した敵を腐食させ、継続ダメージと弱体化を蓄積する。", iconId: "corrosion", category: "module" },
+  { id: "vector", code: "補助-10", title: "ベクターランス", description: "体力が多い敵を優先して、強い弾を撃ちます。", iconId: "vector", category: "module" },
+  { id: "nova", code: "補助-14", title: "ノヴァリング", description: "自分の周り全体へ衝撃波を出します。", iconId: "nova", category: "module" },
+  { id: "mirage", code: "補助-21", title: "ミラージュドローン", description: "自分の周りを飛ぶ小型機が、敵を自動で撃ちます。", iconId: "mirage", category: "module" },
+  { id: "pylon", code: "補助-27", title: "セントリーパイロン", description: "近くの敵を自動で撃つ砲台を置きます。", iconId: "pylon", category: "module" },
+  { id: "reactive", code: "補助-33", title: "リアクティブ装甲", description: "受けるダメージを減らし、被弾時に周囲へ反撃します。", iconId: "reactive", category: "module" },
+  { id: "cryo", code: "補助-41", title: "クライオロック", description: "攻撃が当たった敵の動きを遅くします。", iconId: "cryo", category: "module" },
+  { id: "ricochet", code: "補助-46", title: "跳弾バースト", description: "敵から別の敵へ跳ねる弾を撃ちます。", iconId: "ricochet", category: "module" },
+  { id: "gravity", code: "補助-54", title: "特異点弾", description: "敵を1か所へ引き寄せ、まとめて攻撃します。", iconId: "gravity", category: "module" },
+  { id: "decoy", code: "補助-63", title: "デコイビーコン", description: "敵を引きつけ、最後に爆発するおとりを置きます。", iconId: "decoy", category: "module" },
+  { id: "mortar", code: "補助-68", title: "迫撃アーク", description: "敵が集まっている場所へ、上から爆発弾を落とします。", iconId: "mortar", category: "module" },
+  { id: "split", code: "補助-72", title: "プリズム分裂", description: "当たると小さな弾に分かれ、近くの敵も攻撃します。", iconId: "split", category: "module" },
+  { id: "boomerang", code: "補助-79", title: "リターンブレード", description: "前へ飛び、戻りながらもう一度攻撃する刃です。", iconId: "boomerang", category: "module" },
+  { id: "laser", code: "補助-83", title: "イオンランス", description: "体力が多い敵を優先し、一直線の敵をまとめて攻撃します。", iconId: "laser", category: "module" },
+  { id: "chain", code: "補助-88", title: "アーク連鎖", description: "電撃が近くの敵へ次々につながります。", iconId: "chain", category: "module" },
+  { id: "mine", code: "補助-94", title: "近接地雷", description: "歩いた後ろへ、敵が近づくと爆発する地雷を置きます。", iconId: "mine", category: "module" },
+  { id: "fan", code: "補助-97", title: "プリズム扇撃", description: "前方へ扇形にビームを広げて撃ちます。", iconId: "fan", category: "module" },
+  { id: "skyfall", code: "補助-101", title: "スカイフォール標識", description: "敵が集まった場所へ雷を落とします。", iconId: "skyfall", category: "module" },
+  { id: "cleaver", code: "補助-106", title: "位相クリーヴァー", description: "横に広い斬撃で、並んだ敵をまとめて攻撃します。", iconId: "cleaver", category: "module" },
+  { id: "needle", code: "補助-110", title: "ニードルレイン", description: "敵が集まった場所へ、上から針を降らせます。", iconId: "needle", category: "module" },
+  { id: "saw", code: "補助-114", title: "ソーハロ", description: "自分の周りを回るノコギリが、近い敵を攻撃します。", iconId: "saw", category: "module" },
+  { id: "harpoon", code: "補助-119", title: "チェーンハープーン", description: "体力が多い敵を鎖で引き寄せます。", iconId: "harpoon", category: "module" },
+  { id: "thermal", code: "補助-123", title: "サーマルアーク", description: "熱線が敵へつながり、最後の場所で爆発します。", iconId: "thermal", category: "module" },
+  { id: "sonic", code: "補助-127", title: "ソニックブレイカー", description: "前方へ音の波を出し、敵を押し戻します。", iconId: "sonic", category: "module" },
+  { id: "cluster", code: "補助-132", title: "クラスターコア", description: "当たると追いかける小弾に分かれます。", iconId: "cluster", category: "module" },
+  { id: "corrosion", code: "補助-137", title: "腐食刻印", description: "当てた敵へ少しずつダメージを与え、動きも弱めます。", iconId: "corrosion", category: "module" },
 ];
 
 export const UPGRADE_CATALOG: UpgradeOption[] = [...STANDARD_UPGRADES, ...MODULE_UPGRADES];

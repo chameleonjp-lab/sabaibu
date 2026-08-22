@@ -49,3 +49,11 @@
   .settings-console button, .settings-console input, .settings-trigger { min-height: 44px; }
   .settings-console header button { min-width: 44px; }
 }
+
+/* stick-preview-directly-under-slider */
+.settings-stick-preview {
+  margin-top: -0.25rem;
+  margin-bottom: 0.75rem;
+  min-height: 72px;
+  opacity: var(--preview-opacity, 0.56);
+}
