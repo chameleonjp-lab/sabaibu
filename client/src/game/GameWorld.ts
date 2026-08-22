@@ -283,7 +283,6 @@ export class GameWorld {
   private attackAmplifier = 1;
   private deathCause: string | null = null;
   private readonly evolvedWeapons = new Set<EvolutionId>();
-  private pendingEvolution: EvolutionId | undefined;
   private activeMissionBossStage: 0 | 1 | 2 | 3 = 0;
   private readonly spawnedNormalBossStages = new Set<1 | 2 | 3>();
   private runFinalized = false;
@@ -573,14 +572,12 @@ export class GameWorld {
     if (this.phase !== "bossReward") return;
     const selectedReward = this.getBossRewardOptions().find((reward) => reward.id === id);
     if (!selectedReward?.enabled) return;
-    if (id === "repair") {
-      this.health = Math.min(this.maxHealth, this.health + Math.max(28, Math.ceil(this.maxHealth * 0.35)));
-    } else if (id === "amplify") {
-      this.attackAmplifier = Math.min(1.48, this.attackAmplifier + 0.08);
-    } else if (this.pendingEvolution) {
-      this.activateEvolution(this.pendingEvolution);
+    if (id === "amplify") {
+      this.attackAmplifier += 0.04;
+    } else if (id === "fortify") {
+      this.maxHealth += 5;
+      this.health = Math.min(this.maxHealth, this.health + 5);
     }
-    this.pendingEvolution = undefined;
     this.activeEncounterLabel = this.mode === "normal" ? "通常侵入" : "戦線再編";
     this.encounterTimer = Math.max(this.encounterTimer, 6);
     this.phase = "playing";
@@ -607,6 +604,8 @@ export class GameWorld {
     if (this.isModuleId(id)) {
       this.moduleTiers[id] = Math.min(3, this.moduleTiers[id] + 1);
       this.activateModule(id);
+      const evolution = this.getEligibleEvolution();
+      if (evolution) this.activateEvolution(evolution.id);
     } else if (id === "pulse") {
       if (this.weaponTier < 3) {
         this.weaponTier += 1;
@@ -820,7 +819,6 @@ export class GameWorld {
     this.dodgePerfectRegistered = false;
     this.attackAmplifier = 1;
     this.deathCause = null;
-    this.pendingEvolution = undefined;
     this.activeMissionBossStage = 0;
     this.runFinalized = false;
     this.debugHits = 0;
@@ -3826,7 +3824,6 @@ export class GameWorld {
     reward.position.y = 0.2;
     reward.material = this.magnetMaterial;
     this.shockwaves.push({ mesh: reward, life: 0.68, maxLife: 0.68 });
-    this.pendingEvolution = this.getEligibleEvolution()?.id;
     this.phase = "bossReward";
     this.queueSound("choice");
     this.emitSnapshot();
@@ -4127,9 +4124,9 @@ export class GameWorld {
     const catalog = this.level >= 10 ? UPGRADE_CATALOG : STANDARD_UPGRADES;
     const candidates = catalog.filter((option) => this.canOfferUpgrade(option));
     if (candidates.length >= 3) return candidates;
-    // These three upgrades intentionally become uncapped mastery choices after
-    // their normal tiers, so an exhaustive Endless build can never softlock.
-    const masteryFallback = STANDARD_UPGRADES.filter((option) => option.id === "pulse" || option.id === "relay" || option.id === "barrier")
+    // Keep three repeatable choices without reintroducing durability in Normal.
+    // Endless keeps Barrier as its defensive mastery fallback.
+    const masteryFallback = this.getMasteryFallbackOptions()
       .filter((option) => !candidates.some((candidate) => candidate.id === option.id));
     return [...candidates, ...masteryFallback];
   }
@@ -4148,10 +4145,19 @@ export class GameWorld {
     const existingPool = this.getExistingUpgradePool().filter((option) => !selected.some((picked) => picked.id === option.id));
     selected.push(...this.pickWeightedOptions(existingPool, 3 - selected.length));
     if (selected.length < 3) {
-      const masteryFallback = STANDARD_UPGRADES.filter((option) => (option.id === "pulse" || option.id === "relay" || option.id === "barrier") && !selected.some((picked) => picked.id === option.id));
+      const masteryFallback = this.getMasteryFallbackOptions()
+        .filter((option) => !selected.some((picked) => picked.id === option.id));
       selected.push(...this.pickWeightedOptions(masteryFallback, 3 - selected.length));
     }
     return selected;
+  }
+
+  private getMasteryFallbackOptions() {
+    return STANDARD_UPGRADES.filter((option) =>
+      option.id === "pulse"
+      || option.id === "relay"
+      || (this.mode === "normal" ? option.id === "orbit" : option.id === "barrier"),
+    );
   }
 
   private canOfferExistingUpgrade(option: UpgradeOption) {
@@ -4179,7 +4185,10 @@ export class GameWorld {
     if (id === "scatter") return this.hasScatter ? this.scatterTier < 3 : this.getAttackSlotCount() < this.getWeaponLimit();
     if (id === "orbit") return this.hasOrbit ? this.orbitTier < 3 : this.getAttackSlotCount() < this.getWeaponLimit();
     if (id === "relay") return this.relayTier > 0 ? this.relayTier < 4 : this.getUtilityCount() < UTILITY_SLOT_LIMIT;
-    if (id === "barrier") return this.barrierTier > 0 ? this.barrierTier < 4 : this.getUtilityCount() < UTILITY_SLOT_LIMIT;
+    if (id === "barrier") {
+      if (this.mode === "normal") return false;
+      return this.barrierTier > 0 ? this.barrierTier < 4 : this.getUtilityCount() < UTILITY_SLOT_LIMIT;
+    }
     return false;
   }
 
@@ -4254,11 +4263,19 @@ export class GameWorld {
 
   private getBossRewardOptions() {
     if (this.phase !== "bossReward") return [];
-    const evolution = this.pendingEvolution ? EVOLUTION_RECIPES.find((recipe) => recipe.id === this.pendingEvolution) : undefined;
     return [
-      { id: "repair" as const, title: "修復", description: this.health < this.maxHealth ? `耐久を${Math.max(28, Math.ceil(this.maxHealth * 0.35))}回復` : "耐久最大のまま次の戦闘へ", enabled: true },
-      { id: "amplify" as const, title: "増幅", description: `全攻撃 +8%（現在の倍率 ×${this.attackAmplifier.toFixed(2)}）`, enabled: this.attackAmplifier < 1.48 },
-      { id: "evolve" as const, title: "改造", description: evolution ? `${evolution.name}へ進化` : "レベル3の対応武器ペアが必要", enabled: Boolean(evolution) },
+      {
+        id: "amplify" as const,
+        title: "攻撃強化",
+        description: `全攻撃ダメージ +4%（×${this.attackAmplifier.toFixed(2)} → ×${(this.attackAmplifier + 0.04).toFixed(2)}）`,
+        enabled: true,
+      },
+      {
+        id: "fortify" as const,
+        title: "耐久強化",
+        description: `最大耐久 +5（${this.maxHealth} → ${this.maxHealth + 5}）／現在耐久も5回復`,
+        enabled: true,
+      },
     ];
   }
 
@@ -4274,7 +4291,7 @@ export class GameWorld {
     const evolutionHint = recipe
       ? this.evolvedWeapons.has(recipe.id)
         ? `${recipe.name} 完成済み`
-        : `${option.title} レベル3 + ${partnerOption?.title ?? partner} レベル3 → ${recipe.name}`
+        : `${option.title}と${partnerOption?.title ?? partner}を両方レベル3にすると${recipe.name}へ自動進化`
       : undefined;
     return {
       ...option,
@@ -4282,7 +4299,7 @@ export class GameWorld {
       nextLevel,
       role: this.getUpgradeRole(option.id),
       changeSummary: this.getUpgradeChangeSummary(option.id, currentLevel, nextLevel),
-      synergy: partner && this.moduleTiers[partner] > 0 ? `${partnerOption?.title ?? partner}と進化可能` : undefined,
+      synergy: partner && this.moduleTiers[partner] > 0 ? `${partnerOption?.title ?? partner}と両方レベル3で自動進化` : undefined,
       evolutionHint,
     };
   }

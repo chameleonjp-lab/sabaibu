@@ -407,7 +407,7 @@ button { font: inherit; }
 .boss-reward-panel header { display: grid; gap: 4px; margin-bottom: 10px; }
 .boss-reward-panel header span { color: #ffca6c; font: 700 8px / 1 "IBM Plex Mono", monospace; letter-spacing: .15em; }
 .boss-reward-panel h3 { margin: 0; color: #fff4d8; font: 700 18px / 1 "Chakra Petch", sans-serif; }
-.boss-reward-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.boss-reward-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .boss-reward-card { position: relative; min-height: 104px; padding: 10px; text-align: left; color: #effff6; border: 1px solid rgba(255, 225, 167, .26); background: rgba(11, 21, 20, .82); cursor: pointer; }
 .boss-reward-card strong, .boss-reward-card small { display: block; }
 .boss-reward-card strong { color: #ffcf79; font: 700 13px / 1.05 "Chakra Petch", sans-serif; }

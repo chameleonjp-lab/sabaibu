@@ -75,6 +75,94 @@ describe("GameWorld damage ordering", () => {
   });
 });
 
+describe("GameWorld Normal upgrade and boss reward policy", () => {
+  it("removes durability upgrades from Normal while keeping Barrier in Endless", () => {
+    stubWindow();
+    const createWorld = (mode: "normal" | "endless") => {
+      const engine = new NullEngine({ renderWidth: 390, renderHeight: 844, textureSize: 256 });
+      const scene = new Scene(engine);
+      const world = new GameWorld(scene, () => undefined, false, false, false, false, false, false, false, false, false, undefined, false, 0, 0, 0, 0, 0, 0, false, false, mode);
+      return { engine, scene, world };
+    };
+
+    const normal = createWorld("normal");
+    const endless = createWorld("endless");
+    const normalRuntime = normal.world as unknown as { getUpgradeCandidatePool: () => Array<{ id: string }>; getMasteryFallbackOptions: () => Array<{ id: string }> };
+    const endlessRuntime = endless.world as unknown as { getUpgradeCandidatePool: () => Array<{ id: string }>; getMasteryFallbackOptions: () => Array<{ id: string }> };
+
+    expect(normalRuntime.getUpgradeCandidatePool().map((option) => option.id)).not.toContain("barrier");
+    expect(normalRuntime.getMasteryFallbackOptions().map((option) => option.id)).toEqual(["pulse", "orbit", "relay"]);
+    expect(endlessRuntime.getUpgradeCandidatePool().map((option) => option.id)).toContain("barrier");
+    expect(endlessRuntime.getMasteryFallbackOptions().map((option) => option.id)).toEqual(["pulse", "relay", "barrier"]);
+
+    normal.world.dispose();
+    normal.scene.dispose();
+    normal.engine.dispose();
+    endless.world.dispose();
+    endless.scene.dispose();
+    endless.engine.dispose();
+  });
+
+  it("offers exactly attack +4% or durability +5 and applies the selected reward", () => {
+    stubWindow();
+    const { engine, scene, world } = createNormalWorld(() => undefined);
+    const runtime = world as unknown as {
+      phase: GameSnapshot["phase"];
+      attackAmplifier: number;
+      health: number;
+      maxHealth: number;
+      getBossRewardOptions: () => Array<{ id: string; enabled: boolean }>;
+    };
+
+    runtime.phase = "bossReward";
+    expect(runtime.getBossRewardOptions().map((reward) => ({ id: reward.id, enabled: reward.enabled }))).toEqual([
+      { id: "amplify", enabled: true },
+      { id: "fortify", enabled: true },
+    ]);
+
+    world.chooseBossReward("amplify");
+    expect(runtime.attackAmplifier).toBeCloseTo(1.04, 10);
+    expect(runtime.phase).toBe("playing");
+
+    runtime.phase = "bossReward";
+    runtime.health = 70;
+    runtime.maxHealth = 100;
+    world.chooseBossReward("fortify");
+    expect(runtime.maxHealth).toBe(105);
+    expect(runtime.health).toBe(75);
+    expect(runtime.phase).toBe("playing");
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("moves paired weapon evolution out of the boss reward and applies it automatically at level 3", () => {
+    stubWindow();
+    const { engine, scene, world } = createNormalWorld(() => undefined);
+    const runtime = world as unknown as {
+      phase: GameSnapshot["phase"];
+      moduleTiers: Record<string, number>;
+      upgradeOptions: Array<{ id: string }>;
+      evolvedWeapons: Set<string>;
+    };
+
+    runtime.phase = "upgrade";
+    runtime.moduleTiers.vector = 3;
+    runtime.moduleTiers.laser = 2;
+    runtime.upgradeOptions = [{ id: "laser" }];
+    world.chooseUpgrade("laser");
+
+    expect(runtime.moduleTiers.laser).toBe(3);
+    expect(runtime.evolvedWeapons.has("vector-laser")).toBe(true);
+    expect(runtime.phase).toBe("playing");
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+});
+
 describe("GameWorld normal mission lifecycle", () => {
   it("runs the actual 03:00, 06:00, 09:15 boss sequence and fails at 10:00 when the final boss remains", () => {
     stubWindow();
@@ -87,7 +175,7 @@ describe("GameWorld normal mission lifecycle", () => {
       boss!.hp = 0;
       expect(runtime.destroyEnemy(boss!)).toBe(true);
       expect(latestSnapshot?.phase).toBe("bossReward");
-      world.chooseBossReward("repair");
+      world.chooseBossReward("amplify");
       expect(latestSnapshot?.phase).toBe("playing");
     };
 
