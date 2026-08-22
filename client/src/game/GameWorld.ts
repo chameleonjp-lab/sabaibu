@@ -1839,6 +1839,7 @@ export class GameWorld {
     this.shockwaves.push({ mesh: wave, life: 0.42, maxLife: 0.42 });
     for (let index = this.enemies.length - 1; index >= 0; index -= 1) {
       const enemy = this.enemies[index];
+      if (!this.isCombatTarget(enemy)) continue;
       const offset = enemy.mesh.position.subtract(this.player.position);
       offset.y = 0;
       if (offset.length() > radius) continue;
@@ -1926,6 +1927,7 @@ export class GameWorld {
       if (dealPulse) core.pulse = 0.42;
       for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
         const enemy = this.enemies[enemyIndex];
+        if (!this.isCombatTarget(enemy)) continue;
         const pull = core.mesh.position.subtract(enemy.mesh.position);
         pull.y = 0;
         const distance = pull.length();
@@ -1946,7 +1948,7 @@ export class GameWorld {
       }
       for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
         const enemy = this.enemies[enemyIndex];
-        if (Vector3.DistanceSquared(enemy.mesh.position, core.mesh.position) > radius * radius) continue;
+        if (!this.isCombatTarget(enemy) || Vector3.DistanceSquared(enemy.mesh.position, core.mesh.position) > radius * radius) continue;
         this.applyDamage(enemy, 15 + tier * 11 + (evolved ? 52 + this.moduleTiers.mortar * 14 : 0), "gravity");
         if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
@@ -1982,7 +1984,7 @@ export class GameWorld {
         const pulseRadius = 2.8 + tier * 0.7;
         for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
           const enemy = this.enemies[enemyIndex];
-          if (Vector3.DistanceSquared(enemy.mesh.position, decoy.mesh.position) > pulseRadius * pulseRadius) continue;
+          if (!this.isCombatTarget(enemy) || Vector3.DistanceSquared(enemy.mesh.position, decoy.mesh.position) > pulseRadius * pulseRadius) continue;
           this.applyDamage(enemy, 6 + tier * 5, "decoy");
           if (enemy.hp <= 0) this.destroyEnemy(enemy);
         }
@@ -1991,7 +1993,7 @@ export class GameWorld {
       const radius = 3.8 + tier * 1.05;
       for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
         const enemy = this.enemies[enemyIndex];
-        if (Vector3.DistanceSquared(enemy.mesh.position, decoy.mesh.position) > radius * radius) continue;
+        if (!this.isCombatTarget(enemy) || Vector3.DistanceSquared(enemy.mesh.position, decoy.mesh.position) > radius * radius) continue;
         this.applyDamage(enemy, 30 + tier * 16, "decoy");
         if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
@@ -2042,7 +2044,7 @@ export class GameWorld {
       this.shockwaves.push({ mesh: wave, life: 0.34, maxLife: 0.34 });
       for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
         const enemy = this.enemies[enemyIndex];
-        if (!this.isEnemyWithinRadius(enemy, shell.target, shell.radius)) continue;
+        if (!this.isCombatTarget(enemy) || !this.isEnemyWithinRadius(enemy, shell.target, shell.radius)) continue;
         this.applyDamage(enemy, shell.damage, "mortar");
         if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
@@ -2228,7 +2230,7 @@ export class GameWorld {
       this.shockwaves.push({ mesh: wave, life: 0.3, maxLife: 0.3 });
       for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
         const enemy = this.enemies[enemyIndex];
-        if (!this.isEnemyWithinRadius(enemy, mine.mesh.position, blastRadius)) continue;
+        if (!this.isCombatTarget(enemy) || !this.isEnemyWithinRadius(enemy, mine.mesh.position, blastRadius)) continue;
         this.applyDamage(enemy, (30 + tier * 18) * damageScale, "mine");
         if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
@@ -2346,7 +2348,7 @@ export class GameWorld {
       this.shockwaves.push({ mesh: wave, life: 0.34, maxLife: 0.34 });
       for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
         const enemy = this.enemies[enemyIndex];
-        if (!this.isEnemyWithinRadius(enemy, strike.target, strike.radius)) continue;
+        if (!this.isCombatTarget(enemy) || !this.isEnemyWithinRadius(enemy, strike.target, strike.radius)) continue;
         this.applyDamage(enemy, strike.damage, "skyfall");
         if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
@@ -2414,7 +2416,7 @@ export class GameWorld {
       const hitRadius = 0.78 + tier * 0.16;
       for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
         const enemy = this.enemies[enemyIndex];
-        if (!this.isEnemyWithinRadius(enemy, needle.target, hitRadius)) continue;
+        if (!this.isCombatTarget(enemy) || !this.isEnemyWithinRadius(enemy, needle.target, hitRadius)) continue;
         this.applyDamage(enemy, needle.damage, "needle");
         if (enemy.hp <= 0) this.destroyEnemy(enemy);
       }
@@ -2463,6 +2465,7 @@ export class GameWorld {
     this.sawHitTimer = Math.max(0.1, 0.26 - tier * 0.025);
     for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
       const enemy = this.enemies[enemyIndex];
+      if (!this.isCombatTarget(enemy)) continue;
       const hit = this.sawBlades.some((blade) => this.isEnemyWithinRadius(enemy, blade.position, Math.sqrt(1.65)));
       if (!hit) continue;
       this.applyDamage(enemy, 4 + tier * 4, "saw");
@@ -2520,7 +2523,7 @@ export class GameWorld {
         this.shockwaves.push({ mesh: wave, life: 0.24, maxLife: 0.24 });
         for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
           const enemy = this.enemies[enemyIndex];
-          if (!this.isEnemyWithinRadius(enemy, harpoon.target.mesh.position, Math.sqrt(8.4))) continue;
+          if (!this.isCombatTarget(enemy) || !this.isEnemyWithinRadius(enemy, harpoon.target.mesh.position, Math.sqrt(8.4))) continue;
           this.applyDamage(enemy, Math.max(7, harpoon.damage * 0.55), "harpoon");
           if (enemy.hp <= 0) this.destroyEnemy(enemy);
         }
@@ -2565,7 +2568,7 @@ export class GameWorld {
     this.shockwaves.push({ mesh: wave, life: 0.25, maxLife: 0.25 });
     for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
       const enemy = this.enemies[enemyIndex];
-      if (!this.isEnemyWithinRadius(enemy, finalPoint, Math.sqrt(7.8))) continue;
+      if (!this.isCombatTarget(enemy) || !this.isEnemyWithinRadius(enemy, finalPoint, Math.sqrt(7.8))) continue;
       this.applyDamage(enemy, 10 + tier * 7, "thermal");
       if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
@@ -2865,7 +2868,7 @@ export class GameWorld {
     this.shockwaves.push({ mesh: wave, life: 0.28, maxLife: 0.28 });
     for (let index = this.enemies.length - 1; index >= 0; index -= 1) {
       const enemy = this.enemies[index];
-      if (!this.isEnemyWithinRadius(enemy, this.player.position, radius)) continue;
+      if (!this.isCombatTarget(enemy) || !this.isEnemyWithinRadius(enemy, this.player.position, radius)) continue;
       this.applyDamage(enemy, 12 + tier * 10, "reactive");
       if (enemy.hp <= 0) this.destroyEnemy(enemy);
     }
@@ -3034,7 +3037,7 @@ export class GameWorld {
     this.shockwaves.push({ mesh: wave, life: 0.28, maxLife: 0.28 });
     for (let enemyIndex = this.enemies.length - 1; enemyIndex >= 0; enemyIndex -= 1) {
       const enemy = this.enemies[enemyIndex];
-      if (!this.isEnemyWithinRadius(enemy, origin, radius)) continue;
+      if (!this.isCombatTarget(enemy) || !this.isEnemyWithinRadius(enemy, origin, radius)) continue;
       this.applyDamage(enemy, 6 + tier * 6, "corrosion", true);
       enemy.corrosionTime = Math.max(enemy.corrosionTime, 0.9 + tier * 0.3);
       if (enemy.hp <= 0) this.destroyEnemy(enemy);
@@ -3076,6 +3079,7 @@ export class GameWorld {
     });
     for (let index = this.enemies.length - 1; index >= 0; index -= 1) {
       const enemy = this.enemies[index];
+      if (!this.isCombatTarget(enemy)) continue;
       enemy.orbitCooldown = Math.max(0, enemy.orbitCooldown - delta);
       if (enemy.orbitCooldown > 0) continue;
       const inBladeRange = this.orbitBlades.some((blade) => this.isEnemyWithinRadius(enemy, blade.position, Math.sqrt(1.7)));
