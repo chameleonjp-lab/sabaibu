@@ -32,6 +32,22 @@ create index if not exists sabaibu_run_sessions_name_mode_started_idx
 create index if not exists sabaibu_run_sessions_status_expiry_idx
   on private.sabaibu_run_sessions (status, expires_at);
 
+-- Preserve old rows for audit, but do not allow a pre-contract score to remain a best score.
+update public.score_runs
+set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('source', 'sabaibu_legacy_unverified')
+where game_slug in ('sabaibu_normal', 'sabaibu_endless')
+  and coalesce(metadata ->> 'source', '') <> 'sabaibu_verified';
+
+delete from public.game_scores gs
+where gs.game_slug in ('sabaibu_normal', 'sabaibu_endless')
+  and not exists (
+    select 1
+    from public.score_runs sr
+    where sr.normalized_name = gs.normalized_name
+      and sr.game_slug = gs.game_slug
+      and sr.metadata ->> 'source' = 'sabaibu_verified'
+  );
+
 create or replace function public.start_sabaibu_run(
   p_display_name text,
   p_mode text,
@@ -80,7 +96,12 @@ begin
   v_inserted := v_play_count = 1;
 
   if not v_inserted then
-    select s.play_token into v_play_token from private.sabaibu_run_sessions s where s.client_run_id = p_client_run_id;
+    select s.play_token into v_play_token
+    from private.sabaibu_run_sessions s
+    where s.client_run_id = p_client_run_id
+      and s.normalized_name = v_normalized_name
+      and s.game_slug = v_game_slug;
+    if not found then raise exception 'client run id conflict'; end if;
     select gs.play_count into v_play_count from public.game_scores gs where gs.normalized_name = v_normalized_name and gs.game_slug = v_game_slug;
     return query select v_play_token, v_game_slug, coalesce(v_play_count, 1), true;
     return;
@@ -281,3 +302,4 @@ revoke execute on function public.start_sabaibu_run(text, text, uuid, text) from
 revoke execute on function public.submit_sabaibu_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text) from public, anon, authenticated;
 grant execute on function public.start_sabaibu_run(text, text, uuid, text) to anon, authenticated;
 grant execute on function public.submit_sabaibu_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text) to anon, authenticated;
+revoke execute on function private.guard_sabaibu_score_runs() from public, anon, authenticated;
