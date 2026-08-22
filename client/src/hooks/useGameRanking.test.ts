@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeRankingName, rankingSlugForMode } from "@/hooks/useGameRanking";
+import { canSubmitRankingResult, normalizeRankingName, rankingSlugForMode } from "@/hooks/useGameRanking";
 
 describe("shared ranking contract", () => {
   it("keeps Normal and Endless in separate leaderboards", () => {
@@ -14,6 +14,13 @@ describe("shared ranking contract", () => {
 
   it("limits names to the shared twenty-character boundary", () => {
     expect(normalizeRankingName("1234567890123456789012345")).toBe("12345678901234567890");
+  });
+  it("does not submit failed, retired, preview, or disabled runs", () => {
+    expect(canSubmitRankingResult("clear", false, false)).toBe(false);
+    expect(canSubmitRankingResult("clear", true, true)).toBe(false);
+    expect(canSubmitRankingResult("failed", false, true)).toBe(false);
+    expect(canSubmitRankingResult("retired", false, true)).toBe(false);
+    expect(canSubmitRankingResult("clear", false, true)).toBe(true);
   });
 });
 
