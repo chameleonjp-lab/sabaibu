@@ -4018,7 +4018,7 @@ export class GameWorld {
       dodgeCooldown: this.dodgeCooldown,
       dodgeCooldownMax: DODGE_COOLDOWN_SECONDS,
       dodgeBoostSeconds: this.dodgeBoostSeconds,
-      missionLabel: this.mode === "normal" ? "通常作戦 // 目標 10:00" : "無限戦線 // HIGH SCORE",
+      missionLabel: this.mode === "normal" ? "通常作戦 // 目標 10:00" : "無限戦線 // 最高得点",
       objectiveText,
       nextBossSeconds,
       activeBossLabel,
@@ -4196,8 +4196,8 @@ export class GameWorld {
     const evolution = this.pendingEvolution ? EVOLUTION_RECIPES.find((recipe) => recipe.id === this.pendingEvolution) : undefined;
     return [
       { id: "repair" as const, title: "修復", description: this.health < this.maxHealth ? `耐久を${Math.max(28, Math.ceil(this.maxHealth * 0.35))}回復` : "耐久最大のまま次の戦闘へ", enabled: true },
-      { id: "amplify" as const, title: "増幅", description: `全攻撃 +8%（現在 x${this.attackAmplifier.toFixed(2)}）`, enabled: this.attackAmplifier < 1.48 },
-      { id: "evolve" as const, title: "改造", description: evolution ? `${evolution.name}へ進化` : "Lv.3の対応武器ペアが必要", enabled: Boolean(evolution) },
+      { id: "amplify" as const, title: "増幅", description: `全攻撃 +8%（現在の倍率 ×${this.attackAmplifier.toFixed(2)}）`, enabled: this.attackAmplifier < 1.48 },
+      { id: "evolve" as const, title: "改造", description: evolution ? `${evolution.name}へ進化` : "レベル3の対応武器ペアが必要", enabled: Boolean(evolution) },
     ];
   }
 
@@ -4213,7 +4213,7 @@ export class GameWorld {
     const evolutionHint = recipe
       ? this.evolvedWeapons.has(recipe.id)
         ? `${recipe.name} 完成済み`
-        : `${option.title} Lv.3 + ${partnerOption?.title ?? partner} Lv.3 → ${recipe.name}`
+        : `${option.title} レベル3 + ${partnerOption?.title ?? partner} レベル3 → ${recipe.name}`
       : undefined;
     return {
       ...option,
@@ -4251,12 +4251,12 @@ export class GameWorld {
   }
 
   private getUpgradeChangeSummary(id: UpgradeId, currentLevel: number, nextLevel: number) {
-    if (id === "pulse") return this.weaponTier < 3 ? `ダメージ ${this.damage} → ${this.damage + 8}` : `熟練増幅 x${this.attackAmplifier.toFixed(2)} → x${Math.min(1.8, this.attackAmplifier + 0.02).toFixed(2)}`;
+    if (id === "pulse") return this.weaponTier < 3 ? `ダメージ ${this.damage} → ${this.damage + 8}` : `熟練増幅 ×${this.attackAmplifier.toFixed(2)} → ×${Math.min(1.8, this.attackAmplifier + 0.02).toFixed(2)}`;
     if (id === "scatter") return currentLevel === 0 ? "移動方向へ3発の散弾を追加" : `1発ダメージ ${10 + currentLevel * 5} → ${10 + nextLevel * 5}`;
     if (id === "orbit") return currentLevel === 0 ? "周囲を守るセンチネル2基を追加" : `センチネル ${2 + Math.min(2, currentLevel - 1)} → ${2 + Math.min(2, nextLevel - 1)}基`;
     if (id === "relay") return this.relayTier < 4 ? `射撃間隔 ${this.shotDelay.toFixed(2)} → ${Math.max(0.16, this.shotDelay - 0.08).toFixed(2)}秒 / 移動+0.7` : `熟練機動 // 移動速度 ${this.playerSpeed.toFixed(2)} → ${Math.min(12.5, this.playerSpeed + 0.18).toFixed(2)}`;
     if (id === "barrier") return this.barrierTier < 4 ? `最大耐久 ${this.maxHealth} → ${Math.min(PLAYER_MAX_HEALTH_CAP, this.maxHealth + 8)} / 30回復` : `熟練整備 // 20回復 / 回収範囲を微増`;
-    if (this.isModuleId(id)) return currentLevel === 0 ? `${this.getUpgradeRole(id)}を新規導入` : `主効果をLv.${currentLevel} → Lv.${nextLevel}へ強化`;
+    if (this.isModuleId(id)) return currentLevel === 0 ? `${this.getUpgradeRole(id)}を新規導入` : `主効果をレベル${currentLevel} → レベル${nextLevel}へ強化`;
     return "装備性能を強化";
   }
 }
