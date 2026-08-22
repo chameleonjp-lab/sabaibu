@@ -58,7 +58,10 @@ jobs:
           path.write_text(text.replace(old, new))
           PY
           rm scripts/.sabaibu_patch.part*
-          rm .github/workflows/apply-sabaibu-hardening.yml
+          # GITHUB_TOKEN cannot update workflow files. Keep this temporary
+          # workflow unchanged and restore the Pages workflow for this commit;
+          # the connected GitHub app removes/updates them after verification.
+          git restore .github/workflows/deploy-pages.yml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
