@@ -3817,7 +3817,7 @@ export class GameWorld {
       })
       .sort((left, right) => right.damage - left.damage || right.kills - left.kills);
     const totalDamage = Object.values(this.combatStats).reduce((total, stat) => total + stat.damage, 0);
-    const activeBossLabel = this.activeMissionBossStage > 0
+    const activeBossLabel = this.mode === "normal" && this.activeMissionBossStage > 0
       ? NORMAL_BOSS_LABELS[this.activeMissionBossStage]
       : this.enemies.some((enemy) => enemy.milestoneBoss)
         ? "限界個体"
@@ -3826,11 +3826,11 @@ export class GameWorld {
       ? getSecondsUntilNextNormalBoss(this.elapsed)
       : undefined;
     const objectiveText = activeBossLabel
-      ? this.activeMissionBossStage === 1
+      ? this.mode === "normal" && this.activeMissionBossStage === 1
         ? "増援を呼ぶ侵入母艦を撃破せよ"
-        : this.activeMissionBossStage === 2
+        : this.mode === "normal" && this.activeMissionBossStage === 2
           ? "突進を完全回避し、停止した機体へ集中攻撃"
-          : this.activeMissionBossStage === 3
+          : this.mode === "normal" && this.activeMissionBossStage === 3
             ? "予告攻撃後の弱点露出を狙い、最終ボスを撃破"
             : "限界個体を撃破し、報酬を選択せよ"
       : this.mode === "normal"
