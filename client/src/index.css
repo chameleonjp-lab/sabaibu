@@ -43,10 +43,10 @@ button { font: inherit; }
 .health-meter i { background: linear-gradient(90deg, #ef4b36, #ffad26); box-shadow: 0 0 10px #ff7c1e; }
 .health-unit p { margin-top: 8px; font-size: 8px; }
 .combat-debug-panel { position: absolute; top: clamp(112px, 13vh, 142px); right: clamp(18px, 4vw, 64px); padding: 7px 9px; color: #9bfff3; border: 1px solid rgba(93,238,222,.52); background: rgba(3,16,17,.78); font: 600 8px/1.35 "IBM Plex Mono", monospace; letter-spacing: .08em; box-shadow: 0 0 16px rgba(66,225,211,.12); }
-.xp-unit { position: absolute; left: 50%; bottom: clamp(90px, 11vh, 120px); width: min(440px, 49vw); transform: translateX(-50%); }
-.xp-readout { display: flex; justify-content: space-between; margin-bottom: 6px; color: #c9e8bd; font-size: 9px; }
+.xp-unit { position: absolute; left: 50%; bottom: clamp(90px, 11vh, 120px); width: min(340px, 36vw); transform: translateX(-50%); }
+.xp-readout { display: flex; justify-content: space-between; margin-bottom: 3px; color: #c9e8bd; font-size: 8px; letter-spacing: .08em; }
 .xp-readout b { color: #eeffdc; font-weight: 500; }
-.xp-meter { height: 7px; border-color: rgba(193,255,145,.35); }
+.xp-meter { height: 4px; border-color: rgba(193,255,145,.35); }
 .xp-meter i { background: linear-gradient(90deg, #69db2e, #d6ff65); box-shadow: 0 0 12px #b0ff4b; }
 .loadout-rail { position: absolute; right: clamp(18px, 4vw, 64px); bottom: clamp(18px, 2.5vw, 34px); display: flex; align-items: stretch; gap: 7px; }
 .loadout-mark, .weapon-card { background: rgba(8,11,11,.77); border: 1px solid rgba(237,228,209,.24); backdrop-filter: blur(4px); }
@@ -183,9 +183,9 @@ button { font: inherit; }
   .game-shell.viewport-portrait-narrow .health-unit, .game-shell.viewport-portrait .health-unit { top: calc(max(10px, env(safe-area-inset-top)) + 62px); left: max(13px, env(safe-area-inset-left)); width: min(145px, 42vw); padding-left: 8px; }
   .game-shell.viewport-portrait-narrow .health-unit p, .game-shell.viewport-portrait .health-unit p { display: none; }
   .game-shell.viewport-portrait-narrow .unit-header, .game-shell.viewport-portrait .unit-header { font-size: 8px; }
-  .game-shell.viewport-portrait-narrow .xp-unit, .game-shell.viewport-portrait .xp-unit { bottom: calc(103px + env(safe-area-inset-bottom)); width: calc(100% - max(28px, env(safe-area-inset-left) + env(safe-area-inset-right))); }
-  .game-shell.viewport-portrait-narrow .xp-readout, .game-shell.viewport-portrait .xp-readout { margin-bottom: 4px; font-size: 7px; }
-  .game-shell.viewport-portrait-narrow .meter, .game-shell.viewport-portrait .meter { height: 5px; }
+  .game-shell.viewport-portrait-narrow .xp-unit, .game-shell.viewport-portrait .xp-unit { bottom: calc(104px + env(safe-area-inset-bottom)); width: min(270px, 60vw); }
+  .game-shell.viewport-portrait-narrow .xp-readout, .game-shell.viewport-portrait .xp-readout { margin-bottom: 2px; font-size: 6px; letter-spacing: .05em; }
+  .game-shell.viewport-portrait-narrow .xp-unit .meter, .game-shell.viewport-portrait .xp-unit .meter { height: 3px; }
   .game-shell.viewport-portrait-narrow .loadout-rail, .game-shell.viewport-portrait .loadout-rail { left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); bottom: max(8px, env(safe-area-inset-bottom)); gap: 4px; }
   .game-shell.viewport-portrait-narrow .loadout-mark, .game-shell.viewport-portrait .loadout-mark { flex: 0 0 35px; width: 35px; padding: 3px; font-size: 7px; }
   .game-shell.viewport-portrait-narrow .loadout-mark strong, .game-shell.viewport-portrait .loadout-mark strong { font-size: 16px; }
@@ -213,8 +213,8 @@ button { font: inherit; }
   .game-shell.viewport-landscape-compact .health-unit { top: 65px; left: max(13px, env(safe-area-inset-left)); width: 112px; padding-left: 7px; }
   .game-shell.viewport-landscape-compact .health-unit p { display: none; }
   .game-shell.viewport-landscape-compact .unit-header { font-size: 7px; }
-  .game-shell.viewport-landscape-compact .xp-unit { bottom: 70px; width: min(310px, 40vw); }
-  .game-shell.viewport-landscape-compact .xp-readout { margin-bottom: 3px; font-size: 6px; }
+  .game-shell.viewport-landscape-compact .xp-unit { bottom: 70px; width: min(220px, 34vw); }
+  .game-shell.viewport-landscape-compact .xp-readout { margin-bottom: 2px; font-size: 6px; }
   .game-shell.viewport-landscape-compact .loadout-rail { left: auto; right: max(10px, env(safe-area-inset-right)); bottom: max(7px, env(safe-area-inset-bottom)); gap: 3px; }
   .game-shell.viewport-landscape-compact .loadout-mark { width: 34px; padding: 3px; font-size: 7px; }
   .game-shell.viewport-landscape-compact .loadout-mark strong { font-size: 15px; }
@@ -229,7 +229,7 @@ button { font: inherit; }
 @media (max-width: 370px) and (orientation: portrait) {
   .game-shell.viewport-portrait-narrow .brand-lockup h1 { font-size: 13px; }
   .game-shell.viewport-portrait-narrow .health-unit { top: calc(max(8px, env(safe-area-inset-top)) + 57px); width: 132px; }
-  .game-shell.viewport-portrait-narrow .xp-unit { bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .game-shell.viewport-portrait-narrow .xp-unit { bottom: calc(98px + env(safe-area-inset-bottom)); }
   .game-shell.viewport-portrait-narrow .mobile-fire-status { bottom: calc(119px + env(safe-area-inset-bottom)); }
 }
 
