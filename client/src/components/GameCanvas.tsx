@@ -523,17 +523,12 @@ export default function GameCanvas() {
 
   useEffect(() => {
     if (!runStarted) return;
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        resetJoystick();
-        if (phaseRef.current === "playing" && !settingsOpenRef.current) {
-          setPausedCommand(true);
-          setPauseOpen(true);
-          setAnnouncement("RUN PAUSED");
-        }
-      }
-    };
-    const onBlur = () => {
+
+    // iOS Safari can emit a transient window blur while the browser UI or
+    // viewport is changing. Treating every blur as a run exit made a normal
+    // touch/drag open the pause screen. Only pause when the document is
+    // actually hidden (backgrounded, navigated away, or the page is unloaded).
+    const pauseForLifecycleChange = () => {
       resetJoystick();
       if (phaseRef.current === "playing" && !settingsOpenRef.current) {
         setPausedCommand(true);
@@ -541,13 +536,22 @@ export default function GameCanvas() {
         setAnnouncement("RUN PAUSED");
       }
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        pauseForLifecycleChange();
+      }
+    };
+    const onPageHide = () => {
+      if (document.visibilityState === "hidden") {
+        pauseForLifecycleChange();
+      }
+    };
+
     document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("pagehide", onBlur);
-    window.addEventListener("blur", onBlur);
+    window.addEventListener("pagehide", onPageHide);
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("pagehide", onBlur);
-      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("pagehide", onPageHide);
     };
   }, [resetJoystick, runStarted, setPausedCommand]);
 
