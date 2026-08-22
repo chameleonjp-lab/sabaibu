@@ -762,6 +762,18 @@ export default function GameCanvas() {
       return;
     }
     let cancelled = false;
+    const onContextLost = (event: Event) => {
+      event.preventDefault();
+      lifecyclePauseRequestedRef.current = true;
+      setPausedCommand(true);
+      setSceneError("グラフィック機能が一時停止しました。復旧後に再開してください。");
+    };
+    const onContextRestored = () => {
+      setSceneError(null);
+      setAnnouncement("グラフィック機能が復旧しました。");
+    };
+    canvas.addEventListener("webglcontextlost", onContextLost, { passive: false });
+    canvas.addEventListener("webglcontextrestored", onContextRestored);
     const sceneOptions = {
       mode: activeMode,
       demoMode,
@@ -831,6 +843,8 @@ export default function GameCanvas() {
       window.visualViewport?.removeEventListener("resize", onResize);
       window.visualViewport?.removeEventListener("scroll", onResize);
       window.removeEventListener("resize", onResize);
+      canvas.removeEventListener("webglcontextlost", onContextLost);
+      canvas.removeEventListener("webglcontextrestored", onContextRestored);
       resetJoystick();
       handleRef.current?.dispose();
       handleRef.current = null;
@@ -838,7 +852,7 @@ export default function GameCanvas() {
       setSceneReady(false);
       startedRef.current = false;
     };
-  }, [activeMode, auditModule, balancePreviewLevel, bossExplosionFarPreview, bossExplosionPreview, bossPreview, debugMode, demoMode, explosionPreview, forceModulePreview, forceUpgrade, idlePreview, levelPreview, milestoneBossPreviewLevel, milestoneRewardPreviewLevel, resetJoystick, resultPreview, rerollPreview, runStarted, strikerPreview, variantPreviewLevel]);
+  }, [activeMode, auditModule, balancePreviewLevel, bossExplosionFarPreview, bossExplosionPreview, bossPreview, debugMode, demoMode, explosionPreview, forceModulePreview, forceUpgrade, idlePreview, levelPreview, milestoneBossPreviewLevel, milestoneRewardPreviewLevel, resetJoystick, resultPreview, rerollPreview, runStarted, setPausedCommand, strikerPreview, variantPreviewLevel]);
 
   useEffect(() => {
     if (!touchPreview || !runStarted) return;
