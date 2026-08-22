@@ -5,6 +5,7 @@ const AUDIO_STORAGE_KEY = "neon-siege-player-audio-v1";
 
 const externalSampleSources: Partial<Record<GameSoundCue, string>> = {
   boss: `${import.meta.env.BASE_URL}audio/cc0-metal1.wav`,
+  kill: `${import.meta.env.BASE_URL}audio/kill-confirm.wav`,
   choice: `${import.meta.env.BASE_URL}audio/cc0-switch1.wav`,
 };
 
@@ -21,7 +22,7 @@ const readStoredAudio = () => {
 const frequencies: Record<GameSoundCue, number[]> = {
   start: [220, 330, 440],
   attack: [260],
-  kill: [180],
+  kill: [150, 420, 840],
   xp: [520],
   "level-up": [330, 494, 660],
   warning: [110, 146],
@@ -125,7 +126,7 @@ export function useGameAudio() {
     if (externalBuffer) {
       const sampleGain = context.createGain();
       sampleGain.gain.setValueAtTime(0.0001, now);
-      sampleGain.gain.exponentialRampToValueAtTime(cue === "boss" ? 0.16 : 0.12, now + 0.006);
+      sampleGain.gain.exponentialRampToValueAtTime(cue === "boss" ? 0.16 : cue === "kill" ? 0.14 : 0.12, now + 0.006);
       sampleGain.gain.exponentialRampToValueAtTime(0.0001, now + Math.min(externalBuffer.duration, 0.72));
       sampleGain.connect(context.destination);
       const sample = context.createBufferSource();
@@ -137,7 +138,7 @@ export function useGameAudio() {
 
     frequenciesForCue.forEach((frequency, index) => {
       const oscillator = context.createOscillator();
-      oscillator.type = cue === "damage" || cue === "warning" ? "sawtooth" : "triangle";
+      oscillator.type = cue === "damage" || cue === "warning" ? "sawtooth" : cue === "kill" ? "square" : "triangle";
       oscillator.frequency.setValueAtTime(frequency, now + index * 0.035);
       oscillator.frequency.exponentialRampToValueAtTime(Math.max(40, frequency * 0.72), now + duration);
       oscillator.connect(master);

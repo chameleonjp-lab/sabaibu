@@ -18,6 +18,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { GAME_ASSETS } from "./assets";
 import { ARENA_OBSTACLES } from "./arena";
 import { GameWorld } from "./GameWorld";
+import { splitSimulationDelta } from "./rules";
 import type { BossRewardId, GameMode, GameSnapshot, ModuleId, UpgradeId } from "./types";
 
 export interface GameHandle {
@@ -179,29 +180,28 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
   });
 
   const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview, options.levelPreview, options.balancePreviewLevel, options.variantPreviewLevel, options.milestoneBossPreviewLevel, options.milestoneRewardPreviewLevel, options.obstaclePreview, options.resultPreview, options.mode);
+  let simulationDebt = 0;
   scene.onBeforeRenderObservable.add(() => {
-    const delta = Math.min(0.12, Math.max(0, scene.getEngine().getDeltaTime() / 1000));
+    const frameDelta = Math.max(0, scene.getEngine().getDeltaTime() / 1000);
+    simulationDebt = Math.min(5, simulationDebt + frameDelta);
+    const simulationBudget = Math.min(simulationDebt, 0.6);
+    for (const step of splitSimulationDelta(simulationBudget)) world.update(step);
+    simulationDebt = Math.max(0, simulationDebt - simulationBudget);
+
     const forward = camera.target.subtract(camera.position);
     forward.y = 0;
     if (forward.lengthSquared() > 0.001) forward.normalize();
     const right = new Vector3(forward.z, 0, -forward.x);
     world.setCameraBasis(forward, right);
-    // Preserve simulation time after a dropped mobile frame without allowing
-    // a single oversized step to tunnel through collisions.
-    let remaining = delta;
-    while (remaining > 0) {
-      const step = Math.min(0.05, remaining);
-      world.update(step);
-      remaining -= step;
-    }
     const framing = world.getFramingState();
     const profile = getViewportCameraProfile(scene.getEngine().getRenderWidth(), scene.getEngine().getRenderHeight());
     const baseRadius = Math.min(40, 30 + Math.min(10, framing.nearbyEnemyCount * 0.38)) * profile.radiusScale;
     const desiredRadius = Math.max(camera.lowerRadiusLimit ?? 22, Math.min(43.5, baseRadius * cameraZoomMultiplier));
-    const cameraEase = Math.min(1, delta * 2.8);
+    const cameraDelta = Math.min(0.12, frameDelta);
+    const cameraEase = Math.min(1, cameraDelta * 2.8);
     camera.radius += (desiredRadius - camera.radius) * cameraEase;
-    camera.fov += (profile.fov - camera.fov) * Math.min(1, delta * 4.4);
-    camera.beta += (profile.beta - camera.beta) * Math.min(1, delta * 4.4);
+    camera.fov += (profile.fov - camera.fov) * Math.min(1, cameraDelta * 4.4);
+    camera.beta += (profile.beta - camera.beta) * Math.min(1, cameraDelta * 4.4);
     camera.target.copyFrom(framing.playerPosition);
     // Camera zoom is presentation-only. Targeting, drop reach, and spawn
     // eligibility remain at the same simulation radius on every viewport.
@@ -213,13 +213,19 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     setCameraZoomMultiplier: (multiplier) => {
       cameraZoomMultiplier = Math.max(0.82, Math.min(1.22, multiplier));
     },
-    setPaused: (paused) => world.setPaused(paused),
+    setPaused: (paused) => {
+      if (paused) simulationDebt = 0;
+      world.setPaused(paused);
+    },
     retire: () => world.retire(),
     requestDodge: () => world.requestDodge(),
     chooseBossReward: (id) => world.chooseBossReward(id),
     chooseUpgrade: (id) => world.chooseUpgrade(id),
     rerollUpgrades: () => world.rerollUpgradeChoices(),
-    restart: () => world.restart(),
+    restart: () => {
+      simulationDebt = 0;
+      world.restart();
+    },
     dispose: () => {
       world.dispose();
       camera.detachControl();
