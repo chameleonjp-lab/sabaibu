@@ -1,19 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-export type GameSoundCue =
-  | "start"
-  | "attack"
-  | "kill"
-  | "xp"
-  | "level-up"
-  | "warning"
-  | "perfect"
-  | "boss"
-  | "damage"
-  | "low-health"
-  | "clear"
-  | "gameover"
-  | "choice";
+import type { GameSoundCue } from "@/game/types";
 
 const AUDIO_STORAGE_KEY = "neon-siege-player-audio-v1";
 
@@ -40,6 +26,7 @@ const frequencies: Record<GameSoundCue, number[]> = {
   "level-up": [330, 494, 660],
   warning: [110, 146],
   perfect: [880, 1175],
+  dodge: [620, 930],
   boss: [92, 138, 184],
   damage: [86],
   "low-health": [72, 96],
@@ -56,6 +43,7 @@ const cueDuration: Record<GameSoundCue, number> = {
   "level-up": 0.16,
   warning: 0.1,
   perfect: 0.14,
+  dodge: 0.11,
   boss: 0.18,
   damage: 0.1,
   "low-health": 0.12,

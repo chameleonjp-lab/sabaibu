@@ -3,6 +3,8 @@ import type { EvolutionId, GameMode, ModuleId } from "./types";
 /** The normal run's fixed objective and scheduled boss encounters. */
 export const NORMAL_TARGET_SECONDS = 600;
 export const NORMAL_BOSS_TIMINGS = [180, 360, 555] as const;
+/** Final boss HP multiplier tuned for the 45-second 09:15–10:00 window. */
+export const NORMAL_FINAL_BOSS_HP_MULTIPLIER = 12;
 
 /** Hard encounter-density limits used by normal mode. */
 export const NORMAL_MAX_ENEMIES = 56;

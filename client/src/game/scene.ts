@@ -58,17 +58,17 @@ export interface GameSceneOptions {
   onSnapshot: (snapshot: GameSnapshot) => void;
 }
 
-type ViewportCameraProfile = { fov: number; beta: number; radiusScale: number; combatRadiusScale: number };
+type ViewportCameraProfile = { fov: number; beta: number; radiusScale: number };
 
 const getViewportCameraProfile = (width: number, height: number): ViewportCameraProfile => {
   const aspect = width / Math.max(1, height);
   const compactViewport = Math.min(width, height) < 650;
-  if (aspect < 0.68) return { fov: 0.78, beta: 1.22, radiusScale: 1.08, combatRadiusScale: 0.71 };
-  if (aspect < 0.94) return { fov: 0.86, beta: 1.15, radiusScale: 1.12, combatRadiusScale: 0.74 };
-  if (aspect < 1.28) return { fov: 0.9, beta: 1.1, radiusScale: 1.08, combatRadiusScale: 0.75 };
-  if (compactViewport && aspect >= 1.75) return { fov: 0.96, beta: 0.98, radiusScale: 1.19, combatRadiusScale: 0.78 };
-  if (aspect < 1.75) return { fov: 0.92, beta: 1.02, radiusScale: 1, combatRadiusScale: 0.72 };
-  return { fov: 0.86, beta: 1, radiusScale: 1.07, combatRadiusScale: 0.74 };
+  if (aspect < 0.68) return { fov: 0.78, beta: 1.22, radiusScale: 1.08 };
+  if (aspect < 0.94) return { fov: 0.86, beta: 1.15, radiusScale: 1.12 };
+  if (aspect < 1.28) return { fov: 0.9, beta: 1.1, radiusScale: 1.08 };
+  if (compactViewport && aspect >= 1.75) return { fov: 0.96, beta: 0.98, radiusScale: 1.19 };
+  if (aspect < 1.75) return { fov: 0.92, beta: 1.02, radiusScale: 1 };
+  return { fov: 0.86, beta: 1, radiusScale: 1.07 };
 };
 
 export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement, options: GameSceneOptions): Promise<GameHandle> {
@@ -203,7 +203,8 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     camera.fov += (profile.fov - camera.fov) * Math.min(1, delta * 4.4);
     camera.beta += (profile.beta - camera.beta) * Math.min(1, delta * 4.4);
     camera.target.copyFrom(framing.playerPosition);
-    world.setCombatRadius(Math.max(15, (camera.radius ?? desiredRadius) * profile.combatRadiusScale));
+    // Camera zoom is presentation-only. Targeting, drop reach, and spawn
+    // eligibility remain at the same simulation radius on every viewport.
   });
 
   return {
