@@ -12,7 +12,7 @@ import { createGameScene, type GameHandle } from "@/game/scene";
 import { GAME_ASSETS } from "@/game/assets";
 import { MODULE_UPGRADES, type BossRewardId, type GameMode, type GameSnapshot, type IconId, type ModuleId, type UpgradeId } from "@/game/types";
 import { useGameAudio } from "@/hooks/useGameAudio";
-import { normalizeRankingName, type RankingRow, useGameRanking } from "@/hooks/useGameRanking";
+import { canSubmitRankingResult, normalizeRankingName, type RankingRow, useGameRanking } from "@/hooks/useGameRanking";
 import "../settings-console.css";
 
 type ViewportMode = "portrait-narrow" | "portrait" | "landscape-compact" | "landscape" | "desktop";
@@ -183,6 +183,9 @@ export default function GameCanvas() {
   const lastFocusedElementRef = useRef<HTMLElement | null>(null);
   const playerSettingsRef = useRef<PlayerSettings>(DEFAULT_PLAYER_SETTINGS);
   const pausedBySettingsRef = useRef(false);
+  const pauseOpenRef = useRef(false);
+  const pendingPauseRef = useRef<boolean | null>(null);
+  const lifecyclePauseRequestedRef = useRef(false);
   const rankingRunIdRef = useRef(0);
   const rankingSubmissionKeyRef = useRef("");
 
@@ -263,6 +266,10 @@ export default function GameCanvas() {
     settingsOpenRef.current = settingsOpen;
   }, [settingsOpen]);
 
+  useEffect(() => {
+    pauseOpenRef.current = pauseOpen;
+  }, [pauseOpen]);
+
   const setDirection = useCallback((x: number, z: number) => {
     handleRef.current?.setTouchDirection(x, z);
   }, []);
@@ -275,7 +282,11 @@ export default function GameCanvas() {
   }, [setDirection]);
 
   const setPausedCommand = useCallback((paused: boolean) => {
-    handleRef.current?.setPaused(paused);
+    pendingPauseRef.current = paused;
+    const handle = handleRef.current;
+    if (!handle) return;
+    handle.setPaused(paused);
+    pendingPauseRef.current = null;
   }, []);
 
   const updatePlayerSettings = useCallback((next: PlayerSettings) => {
@@ -311,7 +322,10 @@ export default function GameCanvas() {
       pausedBySettingsRef.current = !fromPause;
       setPausedCommand(true);
     }
-    if (!fromPause) setPauseOpen(false);
+    if (!fromPause) {
+      pauseOpenRef.current = false;
+      setPauseOpen(false);
+    }
     setSettingsOpen(true);
   }, [rememberFocus, resetJoystick, runStarted, setPausedCommand]);
 
@@ -320,6 +334,7 @@ export default function GameCanvas() {
     setSettingsOpen(false);
     if (!pauseOpen && !tutorialOpen && pausedBySettingsRef.current) {
       pausedBySettingsRef.current = false;
+      lifecyclePauseRequestedRef.current = false;
       setPausedCommand(false);
     }
     restoreFocus();
@@ -368,6 +383,8 @@ export default function GameCanvas() {
     resetRankingState();
     setRunStarted(true);
     setIsPaused(false);
+    pauseOpenRef.current = false;
+    lifecyclePauseRequestedRef.current = false;
     setPauseOpen(false);
     settingsOpenRef.current = false;
     setSettingsOpen(false);
@@ -382,8 +399,11 @@ export default function GameCanvas() {
     resetRankingState();
     resetJoystick();
     setPausedCommand(false);
+    pendingPauseRef.current = false;
+    lifecyclePauseRequestedRef.current = false;
     setSettingsOpen(false);
     settingsOpenRef.current = false;
+    pauseOpenRef.current = false;
     setPauseOpen(false);
     setTutorialOpen(false);
     pausedBySettingsRef.current = false;
@@ -397,6 +417,8 @@ export default function GameCanvas() {
     void audio.unlock().then(() => audio.play("start"));
     resetJoystick();
     setPausedCommand(false);
+    pendingPauseRef.current = false;
+    lifecyclePauseRequestedRef.current = false;
     pausedBySettingsRef.current = false;
     settingsOpenRef.current = false;
     setSettingsOpen(false);
@@ -411,6 +433,11 @@ export default function GameCanvas() {
 
   const loadRanking = useCallback(async (mode: GameMode, runId: number) => {
     try {
+      if (!ranking.enabled) {
+        setRankingRows([]);
+        setRankingLoadError("");
+        return;
+      }
       const rows = await ranking.fetchRanking(mode, 5);
       if (rankingRunIdRef.current !== runId) return;
       setRankingRows(rows);
@@ -424,6 +451,12 @@ export default function GameCanvas() {
 
   const submitRankingScore = useCallback(async (resultSnapshot: GameSnapshot, force = false) => {
     if (previewAutostart) return;
+    if (!ranking.enabled) {
+      setRankingStatus("idle");
+      setRankingMessage("ランキング連携は準備中です。記録はこの端末に保存されています。");
+      return;
+    }
+    if (!canSubmitRankingResult(resultSnapshot.outcome, previewAutostart, ranking.enabled)) return;
     const runId = rankingRunIdRef.current;
     const mode = resultSnapshot.mode ?? activeMode;
     const displayName = normalizeRankingName(playerName);
@@ -531,6 +564,7 @@ export default function GameCanvas() {
     const pauseForLifecycleChange = () => {
       resetJoystick();
       if (phaseRef.current === "playing" && !settingsOpenRef.current) {
+        lifecyclePauseRequestedRef.current = true;
         setPausedCommand(true);
         setPauseOpen(true);
         setAnnouncement("RUN PAUSED");
@@ -574,6 +608,8 @@ export default function GameCanvas() {
         if (pauseOpen || isPaused) {
           event.preventDefault();
           event.stopImmediatePropagation();
+          lifecyclePauseRequestedRef.current = false;
+          pauseOpenRef.current = false;
           setPausedCommand(false);
           setPauseOpen(false);
           restoreFocus();
@@ -581,6 +617,8 @@ export default function GameCanvas() {
         }
       }
       if (event.key.toLowerCase() === "p" && phaseRef.current === "playing" && !settingsOpen && !tutorialOpen) {
+        pauseOpenRef.current = !isPaused;
+        lifecyclePauseRequestedRef.current = false;
         setPausedCommand(!isPaused);
         setPauseOpen(!isPaused);
       }
@@ -593,7 +631,10 @@ export default function GameCanvas() {
     if (!runStarted) return;
     if (snapshot.phase === "paused") {
       setIsPaused(true);
-      if (!settingsOpen && !tutorialOpen && !pausedBySettingsRef.current) setPauseOpen(true);
+      if (!settingsOpen && !tutorialOpen && !pausedBySettingsRef.current) {
+        pauseOpenRef.current = true;
+        setPauseOpen(true);
+      }
       return;
     }
     if (snapshot.phase === "playing") {
@@ -629,6 +670,8 @@ export default function GameCanvas() {
     if (snapshot.phase !== "gameover") return;
     resetJoystick();
     setIsPaused(false);
+    pauseOpenRef.current = false;
+    lifecyclePauseRequestedRef.current = false;
     setPauseOpen(false);
     pausedBySettingsRef.current = false;
     settingsOpenRef.current = false;
@@ -710,7 +753,9 @@ export default function GameCanvas() {
     setSceneReady(false);
     let engine: Engine;
     try {
-      engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, adaptToDeviceRatio: true });
+      engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: true, adaptToDeviceRatio: true });
+      // Keep high-DPI iPhones inside a predictable fill-rate budget.
+      engine.setHardwareScalingLevel(Math.max(1, (window.devicePixelRatio || 1) / 1.75));
     } catch (error: unknown) {
       setSceneError(error instanceof Error ? error.message : "Unable to initialize WebGL on this device.");
       startedRef.current = false;
@@ -748,7 +793,9 @@ export default function GameCanvas() {
       }
       handleRef.current = handle;
       handle.setCameraZoomMultiplier(playerSettingsRef.current.cameraZoom);
-      if (settingsOpenRef.current) handle.setPaused(true);
+      const shouldPause = settingsOpenRef.current || pauseOpenRef.current || lifecyclePauseRequestedRef.current || pendingPauseRef.current === true;
+      handle.setPaused(shouldPause);
+      pendingPauseRef.current = null;
       setSceneReady(true);
       engine.runRenderLoop(() => handle.scene.render());
     }).catch((error: unknown) => {
@@ -858,7 +905,7 @@ export default function GameCanvas() {
       <canvas ref={canvasRef} className="game-canvas" style={{ touchAction: "none" }} aria-label="3D survival arena" />
       <div className="containment-floor-overlay" aria-hidden="true" /><img src={GAME_ASSETS.sigil} className="combat-sigil" alt="" aria-hidden="true" /><div className="threat-perimeter" aria-hidden="true"><i /><i /><i /><i /></div><div className="safety-frame" aria-hidden="true"><span className="frame-code frame-code-a">LIVE GRID // 07-A</span><span className="frame-code frame-code-b">HOLD THE LINE</span></div><div className="tactical-vignette" aria-hidden="true" />
       <section className="hud-layer" aria-label="Combat HUD">
-        <header className="mission-bar"><div className="brand-lockup"><img src={GAME_ASSETS.sigil} className="brand-sigil" alt="" aria-hidden="true" /><div><p className="eyebrow">{snapshotView.missionLabel ?? "CONTAINMENT // SECTOR 07"}</p><h1>NEON SIEGE<span>:</span> SURVIVOR</h1></div></div><div className="timer-panel"><span className="timer-label">SURVIVAL CLOCK</span><strong>{formatTime(snapshot.seconds)}</strong>{demoMode && <em>DEMO LINK ACTIVE</em>}</div><div className="kills-panel"><span>HOSTILES PURGED</span><strong>{String(snapshot.kills).padStart(3, "0")}</strong><small>{snapshot.enemyCount} SIGNALS IN RANGE</small></div><div className="run-controls"><span className="mode-badge">{currentMode.toUpperCase()}</span><button className="pause-trigger" data-testid="pause-run" type="button" disabled={snapshot.phase !== "playing"} onClick={() => { rememberFocus(); resetJoystick(); setPausedCommand(true); setPauseOpen(true); }}>PAUSE</button><button className="settings-trigger" data-testid="settings-trigger" type="button" disabled={snapshot.phase !== "playing" && snapshot.phase !== "paused"} onClick={() => openSettings(false)} aria-expanded={settingsDialog} aria-controls="player-settings-panel">SETTINGS</button></div></header>
+        <header className="mission-bar"><div className="brand-lockup"><img src={GAME_ASSETS.sigil} className="brand-sigil" alt="" aria-hidden="true" /><div><p className="eyebrow">{snapshotView.missionLabel ?? "CONTAINMENT // SECTOR 07"}</p><h1>NEON SIEGE<span>:</span> SURVIVOR</h1></div></div><div className="timer-panel"><span className="timer-label">SURVIVAL CLOCK</span><strong>{formatTime(snapshot.seconds)}</strong>{demoMode && <em>DEMO LINK ACTIVE</em>}</div><div className="kills-panel"><span>HOSTILES PURGED</span><strong>{String(snapshot.kills).padStart(3, "0")}</strong><small>{snapshot.enemyCount} SIGNALS IN RANGE</small></div><div className="run-controls"><span className="mode-badge">{currentMode.toUpperCase()}</span><button className="pause-trigger" data-testid="pause-run" type="button" disabled={!sceneReady || snapshot.phase !== "playing"} onClick={() => { rememberFocus(); resetJoystick(); pauseOpenRef.current = true; setPausedCommand(true); setPauseOpen(true); }}>PAUSE</button><button className="settings-trigger" data-testid="settings-trigger" type="button" disabled={snapshot.phase !== "playing" && snapshot.phase !== "paused"} onClick={() => openSettings(false)} aria-expanded={settingsDialog} aria-controls="player-settings-panel">SETTINGS</button></div></header>
         <aside className={`health-unit ${snapshot.damageFlash > 0 ? "damage-alert" : ""}`} aria-label={`Vital armor ${Math.ceil(snapshot.health)} of ${snapshot.maxHealth}`}><div className="unit-header"><span>VITAL ARMOR</span><strong>{Math.ceil(snapshot.health)}<i>/{snapshot.maxHealth}</i></strong></div><div className="meter health-meter" role="progressbar" aria-label="Vital armor" aria-valuemin={0} aria-valuemax={snapshot.maxHealth} aria-valuenow={Math.max(0, Math.ceil(snapshot.health))}><i style={{ width: `${healthPercent}%` }} /></div><p>OPERATOR // {playerName.toUpperCase()}</p></aside>
         {snapshot.debugStatus && <aside className="combat-debug-panel">{snapshot.debugStatus}</aside>}
         <aside className="combat-metrics" aria-label="Run metrics"><span><small>SCORE</small><b>{formatStat(score)}</b></span><span><small>COMBO</small><b>{combo} <i>x{comboMultiplier.toFixed(1)}</i></b></span><span><small>BEST</small><b>{formatStat(Math.max(bestScores[currentMode], score))}</b></span></aside>
@@ -866,15 +913,15 @@ export default function GameCanvas() {
         {perfectDodgeCue > 0 && <div className="perfect-dodge-cue" role="status"><strong>PERFECT DODGE</strong><small>+200 // OUTPUT BOOST</small></div>}
         <div className="xp-unit"><div className="xp-readout"><span>REACTOR SYNC // LV.{String(snapshot.level).padStart(2, "0")}</span><b>{snapshot.xp} / {snapshot.xpNeeded}</b></div><div className="meter xp-meter" role="progressbar" aria-label="Reactor XP" aria-valuemin={0} aria-valuemax={snapshot.xpNeeded} aria-valuenow={Math.max(0, snapshot.xp)}><i style={{ width: `${xpPercent}%` }} /></div></div>
         <footer className="loadout-rail" role="region" tabIndex={0} aria-label="装備レール。左右へスワイプして全ての武器とモジュールを確認" data-testid="loadout-rail"><div className="loadout-mark">WPN<br /><strong>{String(snapshot.weaponCount).padStart(2, "0")}</strong></div>{snapshot.attacks.map((attack) => <div key={attack.id} className={`weapon-card ${attack.active ? "active" : "muted"}`}><ModuleIcon id={attack.iconId} className="weapon-glyph" /><div><b>{attack.label}</b><small>{attack.active ? `LV.${String(attack.tier).padStart(2, "0")} // ${attack.detail}` : attack.detail}</small></div></div>)}<div className="instruction"><kbd>W A S D</kbd><span>HOLD PERIMETER</span></div></footer>
-        {snapshot.phase === "playing" && <div className="floating-control-surface" data-testid="touch-surface" role="group" aria-label="任意位置タップ移動エリア" onContextMenu={(event) => event.preventDefault()} onPointerDown={beginJoystick} onPointerMove={moveJoystick} onPointerUp={endJoystick} onPointerCancel={endJoystick} onLostPointerCapture={endJoystick} />}
+        {snapshot.phase === "playing" && sceneReady && <div className="floating-control-surface" data-testid="touch-surface" role="group" aria-label="任意位置タップ移動エリア" onContextMenu={(event) => event.preventDefault()} onPointerDown={beginJoystick} onPointerMove={moveJoystick} onPointerUp={endJoystick} onPointerCancel={endJoystick} onLostPointerCapture={endJoystick} />}
         {floatingStick && <div className="touch-drive touch-drive-floating" data-testid="floating-stick" aria-hidden="true" style={{ left: floatingStick.x, top: floatingStick.y }}><span className="joystick-rings" /><span className="joystick-knob" style={{ transform: `translate(calc(-50% + ${stickOffset.x}px), calc(-50% + ${stickOffset.y}px))` }}><i /></span><small>VECTOR<br />DRIVE</small></div>}
-        <button className="dodge-button" data-testid="dodge-button" type="button" onClick={requestDodge} disabled={snapshot.phase !== "playing" || isPaused || dodgeCooldown > 0} aria-label={dodgeCooldown > 0 ? `Dodge recharging ${dodgeCooldown.toFixed(1)} seconds` : "Dodge"}><span>DODGE</span><b>{dodgeCooldown > 0 ? `${dodgeCooldown.toFixed(1)}s` : "READY"}</b><i style={{ width: `${dodgePercent}%` }} /></button><aside className="mobile-fire-status" aria-label="Automatic fire active"><span>WPN</span><b>AUTO<br />FIRE</b><i aria-hidden="true">✦</i></aside>
+        <button className="dodge-button" data-testid="dodge-button" type="button" onClick={requestDodge} disabled={!sceneReady || snapshot.phase !== "playing" || isPaused || dodgeCooldown > 0} aria-label={dodgeCooldown > 0 ? `Dodge recharging ${dodgeCooldown.toFixed(1)} seconds` : "Dodge"}><span>DODGE</span><b>{dodgeCooldown > 0 ? `${dodgeCooldown.toFixed(1)}s` : "READY"}</b><i style={{ width: `${dodgePercent}%` }} /></button><aside className="mobile-fire-status" aria-label="Automatic fire active"><span>WPN</span><b>AUTO<br />FIRE</b><i aria-hidden="true">✦</i></aside>
 
         {tutorialOpen && <div className="tutorial-layer" data-testid="tutorial-layer"><aside className="tutorial-console" role="region" aria-live="polite" aria-atomic="true" aria-labelledby="tutorial-title" data-testid="tutorial-dialog"><p className="modal-eyebrow">FIELD TIP // {tutorialStep + 1}/4</p><h2 id="tutorial-title">{tutorialSteps[tutorialStep].title}</h2><p>{tutorialSteps[tutorialStep].copy}</p><div className="tutorial-progress" role="progressbar" aria-label="Tutorial progress" aria-valuemin={1} aria-valuemax={tutorialSteps.length} aria-valuenow={tutorialStep + 1}><i style={{ width: `${((tutorialStep + 1) / tutorialSteps.length) * 100}%` }} /></div><footer><button data-testid="tutorial-dismiss" type="button" onClick={completeTutorial}>DISMISS</button><button className="primary-dialog-button" data-testid="tutorial-next" type="button" onClick={() => advanceTutorial(true)}>{tutorialStep >= tutorialSteps.length - 1 ? "GOT IT" : "NEXT"}</button></footer></aside></div>}
-        {isPaused && !settingsDialog && <div className="modal-layer pause-layer"><section className="pause-console" role="dialog" aria-modal="true" aria-labelledby="pause-title" data-dialog-root="true" data-testid="pause-dialog"><p className="modal-eyebrow">RUN STATE // PAUSED</p><h2 id="pause-title">HOLD<br /><em>POSITION.</em></h2><p>戦闘は停止しています。準備ができたら再開してください。</p><div className="pause-actions"><button className="primary-dialog-button" data-testid="resume-run" type="button" onClick={() => { setPausedCommand(false); setPauseOpen(false); restoreFocus(); }}>RESUME</button><button type="button" onClick={() => openSettings(true)}>SETTINGS</button><button type="button" className="danger-dialog-button" onClick={retireRun}>RETIRE RUN</button></div></section></div>}
+        {isPaused && !settingsDialog && <div className="modal-layer pause-layer"><section className="pause-console" role="dialog" aria-modal="true" aria-labelledby="pause-title" data-dialog-root="true" data-testid="pause-dialog"><p className="modal-eyebrow">RUN STATE // PAUSED</p><h2 id="pause-title">HOLD<br /><em>POSITION.</em></h2><p>戦闘は停止しています。準備ができたら再開してください。</p><div className="pause-actions"><button className="primary-dialog-button" data-testid="resume-run" type="button" onClick={() => { audio.unlock(); lifecyclePauseRequestedRef.current = false; pauseOpenRef.current = false; setPausedCommand(false); setPauseOpen(false); restoreFocus(); }}>RESUME</button><button type="button" onClick={() => openSettings(true)}>SETTINGS</button><button type="button" className="danger-dialog-button" onClick={retireRun}>RETIRE RUN</button></div></section></div>}
         {settingsDialog && <div className="modal-layer settings-layer"><section className="settings-console settings-dialog" id="player-settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" data-dialog-root="true" data-testid="settings-dialog"><header><div><span>PLAYER PREFERENCES</span><h2 id="settings-title">FIELD <em>SETTINGS</em></h2></div><button type="button" onClick={closeSettings} aria-label="設定を閉じる">CLOSE</button></header><p>端末に保存され、次回の出撃にも適用されます。</p>{renderSettingsFields(false)}<footer><button type="button" onClick={() => { pausedBySettingsRef.current = false; settingsOpenRef.current = false; setTutorialStep(0); setTutorialOpen(true); setSettingsOpen(false); setPauseOpen(false); setPausedCommand(false); }}>REPLAY TUTORIAL</button><small>DEFAULT: 56% / 100%</small></footer></section></div>}
         {isUpgrade && <div className="modal-layer"><section className="upgrade-console" role="dialog" aria-modal="true" aria-labelledby="upgrade-title" data-dialog-root="true" data-testid="upgrade-dialog"><p className="modal-eyebrow">{isBossReward ? "BOSS REWARD // ADVANTAGE AVAILABLE" : snapshot.moduleMilestone ? "MODULE BAY EXPANDED" : "SIGNAL OVERRIDE ACCEPTED"}</p><h2 id="upgrade-title">{isBossReward ? <>SELECT A BOSS<br /><em>ADVANTAGE.</em></> : <>SELECT A FIELD<br /><em>MODIFICATION.</em></>}</h2><p className="modal-copy">{isBossReward ? "撃破報酬をひとつ選び、戦闘を再開してください。" : snapshot.moduleMilestone ? "新規攻撃モジュール候補です。ひとつだけ導入してください。" : "既存装備の強化候補から、ひとつだけ承認してください。"} {!isBossReward && <>攻撃枠 {snapshot.weaponCount}/{snapshot.weaponLimit}（Rail込）・補助枠 {snapshot.utilityCount}/{snapshot.utilityLimit}。</>}</p>{(isBossReward || bossRewards.length > 0) && <section className="boss-reward-panel" aria-labelledby="boss-reward-title"><header><span>BOSS REWARD</span><h3 id="boss-reward-title">CHOOSE YOUR ADVANTAGE</h3></header>{bossRewards.length > 0 ? <div className="boss-reward-grid">{bossRewards.map((reward) => <button key={reward.id} type="button" className="boss-reward-card" disabled={!reward.enabled} onClick={() => selectBossReward(reward.id)}><strong>{reward.title}</strong><small>{reward.description}</small><i>{reward.enabled ? "CLAIM" : "LOCKED"}</i></button>)}</div> : <p className="boss-reward-empty">報酬候補を読み込み中です。</p>}</section>}{!isBossReward && <><div className="upgrade-actions"><button className="reroll-button" type="button" onClick={rerollUpgrades} disabled={snapshot.rerollsRemaining <= 0}>REROLL <span>{snapshot.rerollsRemaining}/3</span></button><small>候補を再抽選</small></div><div className="upgrade-grid">{snapshot.upgrades.map((upgrade, index) => { const current = upgrade.currentLevel !== undefined ? `LV.${upgrade.currentLevel}` : "CURRENT"; const next = upgrade.nextLevel !== undefined ? `LV.${upgrade.nextLevel}` : "NEXT"; const role = upgrade.role ?? (upgrade.category === "module" ? "FIELD MODULE" : "STANDARD WEAPON"); const change = upgrade.changeSummary ?? upgrade.description; const synergy = upgrade.synergy ?? upgrade.evolutionHint; return <button key={upgrade.id} data-testid="upgrade-card" type="button" className="upgrade-card" onClick={() => selectUpgrade(upgrade.id)}><span className="choice-number">0{index + 1}</span><ModuleIcon id={upgrade.iconId} className="upgrade-symbol" /><span className="upgrade-code">{upgrade.code}</span><strong>{upgrade.title}</strong><span className="upgrade-role">{role}</span><span className="upgrade-delta"><b>{current}</b><i>→</i><b>{next}</b></span><small>{change}</small>{synergy && <em className="upgrade-synergy">SYNERGY // {synergy}</em>}<i className="install-label">INSTALL</i></button>; })}</div></>}</section></div>}
-        {isGameover && <div className="modal-layer"><section className={`failure-console result-console result-${snapshotView.outcome ?? "failed"}`} role="dialog" aria-modal="true" aria-labelledby="result-title" data-dialog-root="true" data-testid="result-dialog"><p className="modal-eyebrow danger">AFTER ACTION REPORT // {resultOutcome}</p><h2 id="result-title">{resultOutcome === "CLEAR" ? <>FIELD<br />SECURED.</> : resultOutcome === "RETIRED" ? <>RUN<br />RETIRED.</> : <>SIGNAL<br /><em>LOST.</em></>}</h2><div className="result-summary"><span><small>SCORE</small><b>{formatStat(score)}</b></span><span><small>SURVIVAL TIME</small><b>{formatTime(snapshot.seconds)}</b></span><span><small>HOSTILES PURGED</small><b>{formatStat(snapshot.kills)}</b></span><span><small>FINAL LEVEL</small><b>LV.{String(snapshot.level).padStart(2, "0")}</b></span></div><div className="result-goal-stats"><span><small>COMBO</small><b>{combo} <i>x{comboMultiplier.toFixed(1)}</i></b></span><span><small>MAX COMBO</small><b>{maxCombo}</b></span><span><small>PERFECT DODGES</small><b>{perfectDodges}</b></span><span><small>BOSSES DEFEATED</small><b>{bossesDefeated}</b></span></div>{snapshotView.deathCause && resultOutcome !== "CLEAR" && <p className="death-cause">CAUSE // {snapshotView.deathCause}</p>}{snapshotView.dodgeBoostSeconds !== undefined && <p className="dodge-result">DODGE BOOST // {Number(snapshotView.dodgeBoostSeconds).toFixed(1)}s</p>}{evolvedWeapons.length > 0 && <section className="evolution-result" aria-label="Evolved weapons"><header>EVOLVED WEAPONS</header><p>{evolvedWeaponLabels.join(" · ")}</p></section>}<p className="total-damage-result">TOTAL DAMAGE // {formatStat(snapshot.totalDamage)}</p><section className="result-breakdown" aria-label="武器別戦闘統計"><header><span>WEAPON TELEMETRY</span><small>DAMAGE / KILLS</small></header><div className="result-stat-list">{snapshot.resultStats.map((stat, index) => <div className="result-stat-row" key={stat.id}><span className="result-rank">{String(index + 1).padStart(2, "0")}</span><ModuleIcon id={stat.iconId} className="result-stat-icon" /><strong>{stat.label}<small>LV.{String(stat.tier).padStart(2, "0")}</small></strong><b>{formatStat(stat.damage)}<small>DMG</small></b><i>{formatStat(stat.kills)}<small>KILLS</small></i></div>)}</div></section>{rankingVisible && <section className="result-ranking-panel" data-testid="result-ranking" aria-labelledby="result-ranking-title"><header><div><span>GLOBAL RANKING // {currentMode.toUpperCase()}</span><h3 id="result-ranking-title">TOP OPERATORS</h3></div><small>{rankingStatus === "submitting" ? "SYNCING" : rankingStatus === "submitted" ? "SAVED" : rankingStatus === "failed" ? "RETRY AVAILABLE" : "WAITING"}</small></header><p className={`result-ranking-status ranking-status-${rankingStatus}`} data-testid="ranking-status" aria-live="polite">{rankingMessage || "今回の記録をランキングへ送信します。"}</p>{rankingRows.length > 0 ? <ol className="result-ranking-list">{rankingRows.map((row) => <li key={`${row.rank}-${row.displayName}`} className={row.displayName === rankingCurrentName ? "is-current-player" : undefined}><b>{row.rank}</b><span>{row.displayName}{row.displayName === rankingCurrentName && <small>あなた</small>}</span><strong>{formatStat(row.bestScore)}</strong></li>)}</ol> : <p className="result-ranking-empty">{rankingLoadError || (rankingStatus === "submitting" ? "ランキングを読み込み中…" : "まだランキング記録がありません。")}</p>}{rankingStatus === "failed" && <button className="ranking-retry-button" data-testid="ranking-retry" type="button" onClick={retryRankingSubmission}>RETRY SUBMISSION</button>}</section>}<p>記録された戦闘テレメトリーを再確認し、次の出撃に備えてください。</p><p className="best-score-line">BEST {currentMode.toUpperCase()} SCORE // {formatStat(bestScores[currentMode])}</p><div className="result-actions"><button className="primary-dialog-button" data-testid="retry-run" type="button" onClick={retryRun}>RETRY {currentMode.toUpperCase()} <span>GO</span></button><button data-testid="return-title" type="button" onClick={returnToTitle}>RETURN TO TITLE</button></div></section></div>}
+        {isGameover && <div className="modal-layer"><section className={`failure-console result-console result-${snapshotView.outcome ?? "failed"}`} role="dialog" aria-modal="true" aria-labelledby="result-title" data-dialog-root="true" data-testid="result-dialog"><p className="modal-eyebrow danger">AFTER ACTION REPORT // {resultOutcome}</p><h2 id="result-title">{resultOutcome === "CLEAR" ? <>FIELD<br />SECURED.</> : resultOutcome === "RETIRED" ? <>RUN<br />RETIRED.</> : <>SIGNAL<br /><em>LOST.</em></>}</h2><div className="result-summary"><span><small>SCORE</small><b>{formatStat(score)}</b></span><span><small>SURVIVAL TIME</small><b>{formatTime(snapshot.seconds)}</b></span><span><small>HOSTILES PURGED</small><b>{formatStat(snapshot.kills)}</b></span><span><small>FINAL LEVEL</small><b>LV.{String(snapshot.level).padStart(2, "0")}</b></span></div><div className="result-goal-stats"><span><small>COMBO</small><b>{combo} <i>x{comboMultiplier.toFixed(1)}</i></b></span><span><small>MAX COMBO</small><b>{maxCombo}</b></span><span><small>PERFECT DODGES</small><b>{perfectDodges}</b></span><span><small>BOSSES DEFEATED</small><b>{bossesDefeated}</b></span></div>{snapshotView.deathCause && resultOutcome !== "CLEAR" && <p className="death-cause">CAUSE // {snapshotView.deathCause}</p>}{snapshotView.dodgeBoostSeconds !== undefined && <p className="dodge-result">DODGE BOOST // {Number(snapshotView.dodgeBoostSeconds).toFixed(1)}s</p>}{evolvedWeapons.length > 0 && <section className="evolution-result" aria-label="Evolved weapons"><header>EVOLVED WEAPONS</header><p>{evolvedWeaponLabels.join(" · ")}</p></section>}<p className="total-damage-result">TOTAL DAMAGE // {formatStat(snapshot.totalDamage)}</p><section className="result-breakdown" aria-label="武器別戦闘統計"><header><span>WEAPON TELEMETRY</span><small>DAMAGE / KILLS</small></header><div className="result-stat-list">{snapshot.resultStats.map((stat, index) => <div className="result-stat-row" key={stat.id}><span className="result-rank">{String(index + 1).padStart(2, "0")}</span><ModuleIcon id={stat.iconId} className="result-stat-icon" /><strong>{stat.label}<small>LV.{String(stat.tier).padStart(2, "0")}</small></strong><b>{formatStat(stat.damage)}<small>DMG</small></b><i>{formatStat(stat.kills)}<small>KILLS</small></i></div>)}</div></section>{rankingVisible && <section className="result-ranking-panel" data-testid="result-ranking" aria-labelledby="result-ranking-title"><header><div><span>GLOBAL RANKING // {currentMode.toUpperCase()}</span><h3 id="result-ranking-title">TOP OPERATORS</h3></div><small>{rankingStatus === "submitting" ? "SYNCING" : rankingStatus === "submitted" ? "SAVED" : rankingStatus === "failed" ? "RETRY AVAILABLE" : "WAITING"}</small></header><p className={`result-ranking-status ranking-status-${rankingStatus}`} data-testid="ranking-status" aria-live="polite">{rankingMessage || (ranking.enabled ? "今回の記録をランキングへ送信します。" : "ランキング連携は準備中です。記録は端末に保存されています。")}</p>{rankingRows.length > 0 ? <ol className="result-ranking-list">{rankingRows.map((row) => <li key={`${row.rank}-${row.displayName}`} className={row.displayName === rankingCurrentName ? "is-current-player" : undefined}><b>{row.rank}</b><span>{row.displayName}{row.displayName === rankingCurrentName && <small>あなた</small>}</span><strong>{formatStat(row.bestScore)}</strong></li>)}</ol> : <p className="result-ranking-empty">{rankingLoadError || (rankingStatus === "submitting" ? "ランキングを読み込み中…" : "まだランキング記録がありません。")}</p>}{rankingStatus === "failed" && <button className="ranking-retry-button" data-testid="ranking-retry" type="button" onClick={retryRankingSubmission}>RETRY SUBMISSION</button>}</section>}<p>記録された戦闘テレメトリーを再確認し、次の出撃に備えてください。</p><p className="best-score-line">BEST {currentMode.toUpperCase()} SCORE // {formatStat(bestScores[currentMode])}</p><div className="result-actions"><button className="primary-dialog-button" data-testid="retry-run" type="button" onClick={retryRun}>RETRY {currentMode.toUpperCase()} <span>GO</span></button><button data-testid="return-title" type="button" onClick={returnToTitle}>RETURN TO TITLE</button></div></section></div>}
       </section>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</div>
       {!sceneReady && !sceneError && <div className="scene-loading" role="status">INITIALIZING FIELD…</div>}
