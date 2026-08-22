@@ -65,7 +65,7 @@ type BossAction = "none" | "shockwave" | "charge" | "artillery" | "barrage";
 type StrikerAction = "none" | "windup" | "dash";
 type PlayerDamageSource = "idle-needle" | "contact" | "variant-pulse" | "striker-dash" | "bulwark-barrage" | "bulwark-shockwave" | "bulwark-artillery" | "bulwark-charge" | "bulwark-destruction";
 type PlayerDamageResult = "damaged" | "perfect" | "blocked";
-type Enemy = { mesh: AbstractMesh; kind: EnemyKind; hp: number; maxHp: number; speed: number; scale: number; contactDamage: number; xpValue: number; lastDamagedBy?: AttackId; highVariant?: HighVariantId; milestoneBoss?: boolean; missionBossStage?: 1 | 2 | 3; milestoneCrown?: AbstractMesh; variantTimer: number; variantBurst: number; variantAura?: AbstractMesh; healthFill?: AbstractMesh; hitFlash: number; orbitCooldown: number; cryoTime: number; corrosionTime: number; corrosionStacks: number; corrosionTick: number; corrosionMark?: AbstractMesh; enteringContainment: boolean; strikerAction: StrikerAction; strikerTimer: number; strikerCooldown: number; strikerVector: Vector3; strikerDashHit: boolean; strikerMarker?: AbstractMesh; bossAction: BossAction; bossTimer: number; bossCooldown: number; bossTarget: Vector3; bossVector: Vector3; bossChargeHit: boolean; bossBursts: number; bossEnraged: boolean; bossMarker?: AbstractMesh; vulnerableTime: number; summonTimer: number; lastTargetedAt: number };
+type Enemy = { mesh: AbstractMesh; kind: EnemyKind; hp: number; maxHp: number; speed: number; scale: number; contactDamage: number; xpValue: number; hitRadius: number; lastDamagedBy?: AttackId; highVariant?: HighVariantId; milestoneBoss?: boolean; missionBossStage?: 1 | 2 | 3; milestoneCrown?: AbstractMesh; variantTimer: number; variantBurst: number; variantAura?: AbstractMesh; healthFill?: AbstractMesh; hitFlash: number; orbitCooldown: number; cryoTime: number; corrosionTime: number; corrosionStacks: number; corrosionTick: number; corrosionMark?: AbstractMesh; enteringContainment: boolean; strikerAction: StrikerAction; strikerTimer: number; strikerCooldown: number; strikerVector: Vector3; strikerDashHit: boolean; strikerMarker?: AbstractMesh; bossAction: BossAction; bossTimer: number; bossCooldown: number; bossTarget: Vector3; bossVector: Vector3; bossChargeHit: boolean; bossBursts: number; bossEnraged: boolean; bossMarker?: AbstractMesh; vulnerableTime: number; summonTimer: number; lastTargetedAt: number };
 type Projectile = { mesh: AbstractMesh; velocity: Vector3; damage: number; life: number; hitRadius: number; source: AttackId };
 type CombatStat = { damage: number; kills: number };
 type Gem = { mesh: AbstractMesh; value: number };
@@ -110,6 +110,15 @@ const PLAYER_MAX_HEALTH_CAP = 200;
 const MODULE_MILESTONE_START_LEVEL = 30;
 const MODULE_MILESTONE_INTERVAL = 7;
 const MAX_GEM_MESHES = 100;
+const MAX_SHOCKWAVES = 180;
+const MAX_ENERGY_TRACES = 120;
+const MAX_PROJECTILES = 120;
+const MAX_RICOCHET_SHOTS = 96;
+const MAX_SKYFALL_STRIKES = 64;
+const MAX_NEEDLE_DROPS = 128;
+const MAX_IDLE_NEEDLES = 64;
+const MAX_HARPOONS = 32;
+const MAX_CLUSTER_SHARDS = 128;
 const PERFECT_DODGE_SCORE = 200;
 const PERFECT_DODGE_BOOST_SECONDS = 2.5;
 const NORMAL_BOSS_LABELS = ["", "侵入母艦", "突撃指揮機", "重装破城機"] as const;
@@ -475,10 +484,12 @@ export class GameWorld {
     this.updateDamageWarning(safeDelta);
     if (this.idlePreview) this.updateIdleHazard(safeDelta, playerMoved);
     this.updateModules(safeDelta);
+    this.enforceTransientCaps();
     if (this.phase !== "playing" || this.runFinalized) return;
     this.updateSpawning(safeDelta);
     if (this.phase !== "playing" || this.runFinalized) return;
     this.updateCombat(safeDelta);
+    this.enforceTransientCaps();
     if (this.phase !== "playing" || this.runFinalized) return;
     this.updateOrbit(safeDelta);
     if (this.phase !== "playing" || this.runFinalized) return;
@@ -1120,6 +1131,7 @@ export class GameWorld {
 
   private spawnMissionBoss(stage: 1 | 2 | 3) {
     this.clearNonBossEnemies();
+    this.clearTransientCombatEffects();
     const kind: EnemyKind = stage === 1 ? "scout" : stage === 2 ? "striker" : "bulwark";
     this.spawnEnemy(kind, undefined, false);
     const boss = this.enemies[this.enemies.length - 1];
@@ -1130,6 +1142,7 @@ export class GameWorld {
     boss.maxHp = boss.hp;
     boss.scale *= stage === 3 ? 2.25 : 1.95;
     boss.mesh.scaling.setAll(boss.scale);
+    boss.hitRadius *= stage === 3 ? 2.25 : 1.95;
     boss.mesh.position.copyFrom(this.player.position.add(new Vector3(0, 0.8, -Math.min(14, 9 + stage * 1.5))));
     boss.enteringContainment = false;
     if (stage === 1) boss.speed *= 0.46;
@@ -1150,6 +1163,38 @@ export class GameWorld {
     arrival.material = this.enemyThreatMaterial;
     this.shockwaves.push({ mesh: arrival, life: 0.85, maxLife: 0.85 });
     this.emitSnapshot();
+  }
+
+  private clearTransientCombatEffects() {
+    const clearMeshes = <T extends { mesh: AbstractMesh }>(items: T[]) => {
+      for (const item of items) item.mesh.dispose();
+      items.length = 0;
+    };
+    clearMeshes(this.projectiles);
+    clearMeshes(this.shockwaves);
+    clearMeshes(this.ricochetShots);
+    clearMeshes(this.gravityCores);
+    clearMeshes(this.decoys);
+    clearMeshes(this.arcShells);
+    clearMeshes(this.splitShells);
+    clearMeshes(this.returnBlades);
+    clearMeshes(this.energyTraces);
+    clearMeshes(this.mines);
+    clearMeshes(this.needleDrops);
+    clearMeshes(this.clusterCores);
+    clearMeshes(this.clusterShards);
+    for (const strike of this.skyfallStrikes) strike.marker.dispose();
+    this.skyfallStrikes.length = 0;
+    for (const needle of this.idleNeedles) {
+      needle.mesh.dispose();
+      needle.marker.dispose();
+    }
+    this.idleNeedles.length = 0;
+    for (const harpoon of this.harpoons) {
+      harpoon.mesh.dispose();
+      harpoon.cable.dispose();
+    }
+    this.harpoons.length = 0;
   }
 
   private clearNonBossEnemies() {
@@ -1173,24 +1218,36 @@ export class GameWorld {
   }
 
   private spawnMilestoneBoss(level: number) {
+    this.clearNonBossEnemies();
+    this.clearTransientCombatEffects();
     const kinds: EnemyKind[] = ["scout", "striker", "bulwark"];
     const kind = kinds[Math.floor(Math.random() * kinds.length)];
+    const bossStage: 1 | 2 | 3 = kind === "scout" ? 1 : kind === "striker" ? 2 : 3;
     this.spawnEnemy(kind, undefined, false);
     const boss = this.enemies[this.enemies.length - 1];
     boss.milestoneBoss = true;
+    boss.missionBossStage = bossStage;
     const baseHp = 14 + Math.floor(this.elapsed / 25) * 4;
     const orangeTankHp = Math.ceil(baseHp * 3.1);
     boss.hp = orangeTankHp * MILESTONE_BOSS_HP_MULTIPLIER;
     boss.maxHp = boss.hp;
     boss.scale *= MILESTONE_BOSS_SCALE_MULTIPLIER;
     boss.mesh.scaling.setAll(boss.scale);
+    boss.hitRadius *= MILESTONE_BOSS_SCALE_MULTIPLIER;
+    if (bossStage === 1) {
+      boss.speed *= 0.46;
+      boss.summonTimer = 3.8;
+    } else if (bossStage === 2) {
+      boss.strikerCooldown = 1.2;
+    } else {
+      boss.bossCooldown = Math.max(0.8, boss.bossCooldown);
+    }
     if (!boss.healthFill) boss.healthFill = this.createBossHealthBar(boss.mesh);
     const crown = MeshBuilder.CreateTorus("milestone-boss-crown", { diameter: 1.15, thickness: 0.12, tessellation: 24 }, this.scene);
     crown.parent = boss.mesh;
     crown.position.set(0, 1.22, 0);
     crown.material = this.projectileMaterial;
     boss.milestoneCrown = crown;
-    boss.bossCooldown = Math.max(0.8, boss.bossCooldown);
     if (this.debugMode) this.lastDamageSource = "none";
     const announcement = MeshBuilder.CreateTorus("milestone-boss-arrival", { diameter: 2.5, thickness: 0.12, tessellation: 32 }, this.scene);
     announcement.position.copyFrom(boss.mesh.position);
@@ -1227,6 +1284,7 @@ export class GameWorld {
 
   private updateSpawning(delta: number) {
     if (this.auditModule) return;
+    if (this.enemies.some((enemy) => enemy.milestoneBoss)) return;
     if (this.activeMissionBossStage > 0) return;
     if (this.mode === "normal") this.updateEncounterDirector(delta);
     this.spawnTimer -= delta;
@@ -1235,7 +1293,7 @@ export class GameWorld {
     const availableSlots = Math.max(0, spawnProfile.enemyCap - this.enemies.length);
     for (let i = 0; i < Math.min(spawnProfile.batch, availableSlots); i += 1) {
       const queuedKind = this.encounterQueue.shift();
-      this.spawnEnemy(queuedKind);
+      this.spawnEnemy(queuedKind, undefined, queuedKind === undefined);
     }
     this.spawnTimer = spawnProfile.interval;
   }
@@ -1314,6 +1372,9 @@ export class GameWorld {
     body.position.copyFrom(ingress.spawn);
     body.material = profile.material;
     body.scaling.setAll(profile.scale);
+    body.computeWorldMatrix(true);
+    const bodyExtents = body.getBoundingInfo().boundingBox.extendSizeWorld;
+    const hitRadius = Math.max(0.22, Math.max(bodyExtents.x, bodyExtents.z));
     const eye = MeshBuilder.CreateSphere("drone-sensor", { diameter: 0.3, segments: 6 }, this.scene);
     eye.parent = body;
     eye.position = new Vector3(0, 0.02, -0.48);
@@ -1327,7 +1388,7 @@ export class GameWorld {
       this.addVariantSilhouette(body, variant!.trait, profile.material);
     }
     const healthFill = kind === "bulwark" ? this.createBossHealthBar(body) : undefined;
-    this.enemies.push({ mesh: body, kind, hp: profile.hp, maxHp: profile.hp, speed: profile.speed, scale: profile.scale, contactDamage: profile.contactDamage, xpValue: profile.xpValue, highVariant, variantTimer: 0.8 + Math.random() * 0.75, variantBurst: 0, variantAura, healthFill, hitFlash: 0, orbitCooldown: 0, cryoTime: 0, corrosionTime: 0, corrosionStacks: 0, corrosionTick: 0, enteringContainment: true, strikerAction: "none", strikerTimer: 0, strikerCooldown: kind === "striker" ? 1.8 + Math.random() * 1.4 : 0, strikerVector: Vector3.Zero(), strikerDashHit: false, bossAction: "none", bossTimer: 0, bossCooldown: kind === "bulwark" ? 2.6 + Math.random() * 1.1 : 0, bossTarget: Vector3.Zero(), bossVector: Vector3.Zero(), bossChargeHit: false, bossBursts: 0, bossEnraged: false, vulnerableTime: 0, summonTimer: Number.POSITIVE_INFINITY, lastTargetedAt: -1 });
+    this.enemies.push({ mesh: body, kind, hp: profile.hp, maxHp: profile.hp, speed: profile.speed, scale: profile.scale, contactDamage: profile.contactDamage, xpValue: profile.xpValue, hitRadius, highVariant, variantTimer: 0.8 + Math.random() * 0.75, variantBurst: 0, variantAura, healthFill, hitFlash: 0, orbitCooldown: 0, cryoTime: 0, corrosionTime: 0, corrosionStacks: 0, corrosionTick: 0, enteringContainment: true, strikerAction: "none", strikerTimer: 0, strikerCooldown: kind === "striker" ? 1.8 + Math.random() * 1.4 : 0, strikerVector: Vector3.Zero(), strikerDashHit: false, bossAction: "none", bossTimer: 0, bossCooldown: kind === "bulwark" ? 2.6 + Math.random() * 1.1 : 0, bossTarget: Vector3.Zero(), bossVector: Vector3.Zero(), bossChargeHit: false, bossBursts: 0, bossEnraged: false, vulnerableTime: 0, summonTimer: Number.POSITIVE_INFINITY, lastTargetedAt: -1 });
     this.createWallBreach(ingress.breach, profile.material);
   }
 
@@ -1485,9 +1546,12 @@ export class GameWorld {
   }
 
   private getEnemyHitRadius(enemy: Enemy) {
-    enemy.mesh.computeWorldMatrix(true);
+    if (enemy.hitRadius > 0) return enemy.hitRadius;
+    // Compatibility fallback for preview entities created by older snapshots.
+    enemy.mesh.computeWorldMatrix(false);
     const extents = enemy.mesh.getBoundingInfo().boundingBox.extendSizeWorld;
-    return Math.max(0.22, Math.max(extents.x, extents.z));
+    enemy.hitRadius = Math.max(0.22, Math.max(extents.x, extents.z));
+    return enemy.hitRadius;
   }
 
   private isEnemyWithinRadius(enemy: Enemy, origin: Vector3, radius: number) {
@@ -2187,6 +2251,24 @@ export class GameWorld {
     trace.rotation.y = Math.atan2(direction.x, direction.z);
     trace.material = material;
     this.energyTraces.push({ mesh: trace, life, maxLife: life });
+  }
+
+  private enforceTransientCaps() {
+    const trim = <T>(items: T[], maximum: number, dispose: (item: T) => void) => {
+      while (items.length > maximum) {
+        const oldest = items.shift();
+        if (oldest) dispose(oldest);
+      }
+    };
+    trim(this.shockwaves, MAX_SHOCKWAVES, (item) => item.mesh.dispose());
+    trim(this.energyTraces, MAX_ENERGY_TRACES, (item) => item.mesh.dispose());
+    trim(this.projectiles, MAX_PROJECTILES, (item) => item.mesh.dispose());
+    trim(this.ricochetShots, MAX_RICOCHET_SHOTS, (item) => item.mesh.dispose());
+    trim(this.skyfallStrikes, MAX_SKYFALL_STRIKES, (item) => item.marker.dispose());
+    trim(this.needleDrops, MAX_NEEDLE_DROPS, (item) => item.mesh.dispose());
+    trim(this.idleNeedles, MAX_IDLE_NEEDLES, (item) => { item.mesh.dispose(); item.marker.dispose(); });
+    trim(this.harpoons, MAX_HARPOONS, (item) => { item.mesh.dispose(); item.cable.dispose(); });
+    trim(this.clusterShards, MAX_CLUSTER_SHARDS, (item) => item.mesh.dispose());
   }
 
   private updateEnergyTraces(delta: number) {
@@ -3138,6 +3220,7 @@ export class GameWorld {
       const dx = this.player.position.x - enemy.mesh.position.x;
       const dz = this.player.position.z - enemy.mesh.position.z;
       const radius = 3.2 + enemy.scale * 1.1;
+      this.dangerSignal += 1;
       this.emitVariantPulse(enemy, radius, config.contactDamage);
       if (canThreatenPlayer && dx * dx + dz * dz <= radius * radius && this.damageTimer <= 0) this.damagePlayer(Math.min(10, config.contactDamage), 0.58, "variant-pulse");
     } else if (config.trait === "siege" || config.trait === "armor") {
@@ -3337,8 +3420,8 @@ export class GameWorld {
     enemy.mesh.position.addInPlace(enemy.bossVector.scale((13.5 + Math.min(2.5, this.elapsed / 100)) * delta));
     const chargeContactRadius = PLAYER_RING_RADIUS + this.getEnemyHitRadius(enemy);
     if (!enemy.bossChargeHit && Vector3.DistanceSquared(this.player.position, enemy.mesh.position) < chargeContactRadius * chargeContactRadius) {
-      enemy.bossChargeHit = true;
-      this.damagePlayer(16 + Math.floor(this.elapsed / 80), 0.42, "bulwark-charge");
+      const hitResult = this.damagePlayer(16 + Math.floor(this.elapsed / 80), 0.42, "bulwark-charge");
+      enemy.bossChargeHit = hitResult === "damaged" || hitResult === "perfect";
     }
     if (enemy.bossTimer < 0) return true;
     this.finishBulwarkAction(enemy, 5.1);
@@ -3368,7 +3451,6 @@ export class GameWorld {
       if (!this.isInsideContainment(enemy)) continue;
       const contactRadius = PLAYER_RING_RADIUS + this.getEnemyHitRadius(enemy) + 0.38;
       const distanceSquared = Vector3.DistanceSquared(origin, enemy.mesh.position);
-      if (distanceSquared <= contactRadius * contactRadius) return true;
 
       if (enemy.strikerAction === "dash" || (enemy.strikerAction === "windup" && enemy.strikerTimer <= DODGE_PERFECT_WINDOW_SECONDS)) {
         const dashEnd = enemy.mesh.position.add(enemy.strikerVector.scale(8));
@@ -3484,7 +3566,7 @@ export class GameWorld {
     this.combo += 1;
     this.comboTimer = COMBO_WINDOW_SECONDS;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
-    const scoreKind = missionBossStage === 3 ? "final" : milestoneBoss ? "midboss" : enemy.highVariant ? "variant" : enemy.kind;
+    const scoreKind = this.mode === "normal" && missionBossStage === 3 ? "final" : milestoneBoss ? "midboss" : enemy.highVariant ? "variant" : enemy.kind;
     const variantBaseXp = enemy.highVariant ? HIGH_VARIANTS[enemy.highVariant].xp : enemy.xpValue;
     this.score += Math.round(scoreForEnemy(scoreKind, variantBaseXp) * getComboMultiplier(this.combo));
     if (this.health / Math.max(1, this.maxHealth) <= 0.25) this.score += 200;
@@ -3519,7 +3601,7 @@ export class GameWorld {
     if (milestoneBoss) {
       this.bossesDefeated += 1;
       this.activeMissionBossStage = 0;
-      if (missionBossStage === 3) {
+      if (this.mode === "normal" && missionBossStage === 3) {
         this.score += scoreForClear();
         this.finishRun("clear", `最終ボス「${NORMAL_BOSS_LABELS[3]}」を撃破`);
       } else {
