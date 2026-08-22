@@ -25,7 +25,7 @@ export interface SoundEvent {
   id: number;
   cue: GameSoundCue;
 }
-export type BossRewardId = "repair" | "amplify" | "evolve";
+export type BossRewardId = "amplify" | "fortify";
 export type EvolutionId =
   | "vector-laser"
   | "ricochet-chain"
