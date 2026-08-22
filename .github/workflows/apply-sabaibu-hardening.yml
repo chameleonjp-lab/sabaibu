@@ -47,6 +47,16 @@ jobs:
         run: |
           cat scripts/.sabaibu_patch.part* | base64 --decode | xz --decompress > /tmp/apply_sabaibu_hardening.py
           python /tmp/apply_sabaibu_hardening.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("client/src/game/GameWorld.runtime.test.ts")
+          text = path.read_text()
+          old = "\n    for (let frame = 0; frame < 600; frame += 1) world.update(1 / 60);"
+          new = "\n    world.setTouchDirection(0.4, 0.2);\n    for (let frame = 0; frame < 600; frame += 1) world.update(1 / 60);"
+          if text.count(old) != 1:
+              raise SystemExit(f"runtime smoke insertion target count: {text.count(old)}")
+          path.write_text(text.replace(old, new))
+          PY
           rm scripts/.sabaibu_patch.part*
           rm .github/workflows/apply-sabaibu-hardening.yml
 
