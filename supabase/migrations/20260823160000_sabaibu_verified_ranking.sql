@@ -1,4 +1,9 @@
 -- Verified ranking sessions for sabaibu Normal and Endless.
+-- Remove the earlier provisional RPC overloads before exposing the final contract.
+drop function if exists public.finish_sabaibu_run(uuid, text, integer, integer, integer, integer, integer, text);
+drop function if exists public.start_sabaibu_run(text, text);
+drop table if exists private.sabaibu_runs;
+
 create table if not exists private.sabaibu_run_sessions (
   play_token uuid primary key default gen_random_uuid(),
   client_run_id uuid not null unique,
@@ -47,7 +52,7 @@ declare
   v_inserted boolean := false;
 begin
   if p_client_run_id is null then raise exception 'client run id is required'; end if;
-  v_display_name := btrim(coalesce(p_display_name, ''));
+  v_display_name := left(btrim(coalesce(p_display_name, '')), 20);
   v_normalized_name := public.normalize_player_name(v_display_name);
   if char_length(v_normalized_name) = 0 then raise exception 'name is empty'; end if;
   if char_length(v_normalized_name) > 20 then raise exception 'name is too long'; end if;
@@ -237,10 +242,22 @@ security invoker
 set search_path = ''
 as $$
 begin
-  if new.game_slug in ('sabaibu_normal', 'sabaibu_endless')
-     and (coalesce(new.metadata ->> 'source', '') <> 'sabaibu_verified'
-       or coalesce(new.metadata ->> 'play_token', '') = '') then
-    raise exception 'verified sabaibu submission required';
+  if new.game_slug in ('sabaibu_normal', 'sabaibu_endless') then
+    if coalesce(new.metadata ->> 'source', '') <> 'sabaibu_verified'
+       or coalesce(new.metadata ->> 'play_token', '') = '' then
+      raise exception 'verified sabaibu submission required';
+    end if;
+    if not exists (
+      select 1
+      from private.sabaibu_run_sessions s
+      where s.play_token::text = new.metadata ->> 'play_token'
+        and s.status = 'submitted'
+        and s.game_slug = new.game_slug
+        and s.normalized_name = new.normalized_name
+        and s.score = new.score
+    ) then
+      raise exception 'verified sabaibu session mismatch';
+    end if;
   end if;
   return new;
 end;
@@ -251,7 +268,16 @@ create trigger guard_sabaibu_verified_score_runs
 before insert on public.score_runs
 for each row execute function private.guard_sabaibu_score_runs();
 
-revoke execute on function public.start_sabaibu_run(text, text, uuid, text) from public;
-revoke execute on function public.submit_sabaibu_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text) from public;
+create unique index if not exists score_runs_sabaibu_play_token_unique
+  on public.score_runs ((metadata ->> 'play_token'))
+  where game_slug in ('sabaibu_normal', 'sabaibu_endless')
+    and metadata ->> 'play_token' is not null;
+
+update public.games
+set submission_mode = 'verified'
+where game_slug in ('sabaibu_normal', 'sabaibu_endless');
+
+revoke execute on function public.start_sabaibu_run(text, text, uuid, text) from public, anon, authenticated;
+revoke execute on function public.submit_sabaibu_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text) from public, anon, authenticated;
 grant execute on function public.start_sabaibu_run(text, text, uuid, text) to anon, authenticated;
 grant execute on function public.submit_sabaibu_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text) to anon, authenticated;

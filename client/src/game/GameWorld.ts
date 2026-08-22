@@ -1927,9 +1927,9 @@ export class GameWorld {
   }
 
   private fireVectorLance() {
-    this.queueAttackSound();
     const target = this.getHighestHealthTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const tier = this.moduleTiers.vector;
     const aim = target.mesh.position.subtract(this.player.position);
     aim.y = 0;
@@ -1974,9 +1974,9 @@ export class GameWorld {
   }
 
   private fireRicochetBurst() {
-    this.queueAttackSound();
     const target = this.getNearestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const tier = this.moduleTiers.ricochet;
     const evolved = this.hasEvolution("ricochet-chain");
     const shotCount = evolved ? 1 : tier;
@@ -2031,9 +2031,9 @@ export class GameWorld {
   }
 
   private spawnGravityCore() {
-    this.queueAttackSound();
     const target = this.getDensestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const core = MeshBuilder.CreateSphere("singularity-core", { diameter: 0.78, segments: 10 }, this.scene);
     core.position.copyFrom(target.mesh.position);
     core.position.y = 0.8;
@@ -2140,9 +2140,9 @@ export class GameWorld {
   }
 
   private fireMortarArc() {
-    this.queueAttackSound();
     const target = this.getDensestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const tier = this.moduleTiers.mortar;
     const shellCount = tier === 3 ? 3 : tier;
     for (let index = 0; index < shellCount; index += 1) {
@@ -2182,9 +2182,9 @@ export class GameWorld {
   }
 
   private fireSplitShell() {
-    this.queueAttackSound();
     const target = this.getNearestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const shell = MeshBuilder.CreateSphere("prism-shell", { diameter: 0.32, segments: 6 }, this.scene);
     shell.position.copyFrom(this.player.position);
     shell.position.y = 1.05;
@@ -2226,9 +2226,9 @@ export class GameWorld {
   }
 
   private throwReturnBlade() {
-    this.queueAttackSound();
     const target = this.getFarthestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const direction = target.mesh.position.subtract(this.player.position);
     direction.y = 0;
     direction.normalize();
@@ -2273,9 +2273,9 @@ export class GameWorld {
   }
 
   private fireIonLance() {
-    this.queueAttackSound();
     const target = this.getHighestHealthTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const tier = this.moduleTiers.laser;
     const start = this.player.position.add(new Vector3(0, 1.04, 0));
     const direction = target.mesh.position.subtract(start);
@@ -2293,10 +2293,10 @@ export class GameWorld {
   }
 
   private fireArcLink() {
-    this.queueAttackSound();
     const tier = this.moduleTiers.chain;
     let target = this.getNearestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const visited = new Set<AbstractMesh>();
     let origin = this.player.position.add(new Vector3(0, 0.96, 0));
     const jumps = 2 + tier * 2;
@@ -2418,9 +2418,9 @@ export class GameWorld {
   }
 
   private firePrismFan() {
-    this.queueAttackSound();
     const target = this.getNearestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const tier = this.moduleTiers.fan;
     const start = this.player.position.add(new Vector3(0, 0.96, 0));
     const aim = target.mesh.position.subtract(start);
@@ -2448,9 +2448,9 @@ export class GameWorld {
   }
 
   private deploySkyfallMarker() {
-    this.queueAttackSound();
     const target = this.getDensestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const tier = this.moduleTiers.skyfall;
     const strikeCount = tier;
     for (let strikeIndex = 0; strikeIndex < strikeCount; strikeIndex += 1) {
@@ -2493,9 +2493,9 @@ export class GameWorld {
   }
 
   private firePhaseCleaver() {
-    this.queueAttackSound();
     const target = this.getNearestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const tier = this.moduleTiers.cleaver;
     const start = this.player.position.add(new Vector3(0, 0.92, 0));
     const aim = target.mesh.position.subtract(start);
@@ -2522,9 +2522,9 @@ export class GameWorld {
   }
 
   private fireNeedleRain() {
-    this.queueAttackSound();
     const target = this.getDensestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const tier = this.moduleTiers.needle;
     const needleCount = 4 + tier * 3;
     const spreadRadius = 2.4 + tier * 0.9;
@@ -2612,9 +2612,9 @@ export class GameWorld {
   }
 
   private fireChainHarpoon() {
-    this.queueAttackSound();
     const target = this.getHighestHealthTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const tier = this.moduleTiers.harpoon;
     const harpoon = MeshBuilder.CreateCylinder("chain-harpoon", { height: 0.72, diameterTop: 0.08, diameterBottom: 0.22, tessellation: 6 }, this.scene);
     harpoon.position.copyFrom(this.player.position.add(new Vector3(0, 0.94, 0)));
@@ -2683,10 +2683,10 @@ export class GameWorld {
   }
 
   private fireThermalArc() {
-    this.queueAttackSound();
     const tier = this.moduleTiers.thermal;
     let target = this.getNearestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const visited = new Set<AbstractMesh>();
     let origin = this.player.position.add(new Vector3(0, 0.98, 0));
     const jumps = 2 + tier * 2;
@@ -2715,9 +2715,9 @@ export class GameWorld {
   }
 
   private fireSonicBreaker() {
-    this.queueAttackSound();
     const target = this.getNearestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const tier = this.moduleTiers.sonic;
     const start = this.player.position.add(new Vector3(0, 0.9, 0));
     const aim = target.mesh.position.subtract(start);
@@ -2749,9 +2749,9 @@ export class GameWorld {
   }
 
   private fireClusterCore() {
-    this.queueAttackSound();
     const target = this.getNearestTarget(this.player.position);
     if (!target) return;
+    this.queueAttackSound();
     const tier = this.moduleTiers.cluster;
     const core = MeshBuilder.CreatePolyhedron("cluster-core", { type: 2, size: 0.34 + tier * 0.045 }, this.scene);
     core.position.copyFrom(this.player.position.add(new Vector3(0, 1.02, 0)));
@@ -3609,10 +3609,10 @@ export class GameWorld {
     return true;
   }
 
-  private createBossWarning(position: Vector3, diameter: number) {
+  private createBossWarning(position: Vector3, attackRadius: number) {
     this.dangerSignal += 1;
     this.queueSound("warning");
-    const marker = MeshBuilder.CreateTorus("bulwark-warning", { diameter, thickness: 0.1, tessellation: 28 }, this.scene);
+    const marker = MeshBuilder.CreateTorus("bulwark-warning", { diameter: Math.max(0.2, attackRadius * 2), thickness: 0.1, tessellation: 28 }, this.scene);
     marker.position.copyFrom(position);
     marker.position.y = 0.14;
     marker.material = this.enemyThreatMaterial;
@@ -3628,11 +3628,15 @@ export class GameWorld {
     if (enemy.milestoneBoss) enemy.vulnerableTime = Math.max(enemy.vulnerableTime, 1.35);
   }
 
-  private playerRingTouchesPoint(point: Vector3, attackRadius = 0) {
-    const dx = this.player.position.x - point.x;
-    const dz = this.player.position.z - point.z;
+  private ringTouchesPointAt(origin: Vector3, point: Vector3, attackRadius = 0) {
+    const dx = origin.x - point.x;
+    const dz = origin.z - point.z;
     const radius = PLAYER_RING_RADIUS + Math.max(0, attackRadius);
     return dx * dx + dz * dz <= radius * radius;
+  }
+
+  private playerRingTouchesPoint(point: Vector3, attackRadius = 0) {
+    return this.ringTouchesPointAt(this.player.position, point, attackRadius);
   }
 
   private playerRingTouchesTrace(start: Vector3, end: Vector3, attackRadius = 0) {
@@ -3662,9 +3666,9 @@ export class GameWorld {
     }
 
     if (enemy.bossAction !== "none" && enemy.bossTimer <= DODGE_PERFECT_WINDOW_SECONDS) {
-      if (enemy.bossAction === "shockwave" && this.playerRingTouchesPoint(enemy.mesh.position, 3.8)) return true;
-      if (enemy.bossAction === "artillery" && this.playerRingTouchesPoint(enemy.bossTarget, 3.15)) return true;
-      if (enemy.bossAction === "barrage" && this.playerRingTouchesPoint(enemy.bossTarget, 1.85)) return true;
+      if (enemy.bossAction === "shockwave" && this.ringTouchesPointAt(origin, enemy.mesh.position, 3.8)) return true;
+      if (enemy.bossAction === "artillery" && this.ringTouchesPointAt(origin, enemy.bossTarget, 3.15)) return true;
+      if (enemy.bossAction === "barrage" && this.ringTouchesPointAt(origin, enemy.bossTarget, 1.85)) return true;
       if (enemy.bossAction === "charge") {
         const chargeEnd = enemy.bossTimer > 0 ? enemy.bossTarget : enemy.mesh.position.add(enemy.bossVector.scale(8));
         if (this.distanceToSegmentSquared(origin, enemy.mesh.position, chargeEnd) <= contactRadius * contactRadius) return true;
@@ -3673,7 +3677,7 @@ export class GameWorld {
 
     if (enemy.highVariant && HIGH_VARIANTS[enemy.highVariant].trait === "pulse" && enemy.variantTelegraphTimer > 0 && enemy.variantTelegraphTimer <= DODGE_PERFECT_WINDOW_SECONDS) {
       const pulseRadius = 3.2 + enemy.scale * 1.1;
-      if (this.playerRingTouchesPoint(enemy.mesh.position, pulseRadius)) return true;
+      if (this.ringTouchesPointAt(origin, enemy.mesh.position, pulseRadius)) return true;
     }
     return false;
   }

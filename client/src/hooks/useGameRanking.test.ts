@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { canSubmitRankingResult, normalizeRankingName, rankingSlugForMode } from "@/hooks/useGameRanking";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { canSubmitRankingResult, createClientRunId, normalizeRankingName, rankingSlugForMode } from "@/hooks/useGameRanking";
 
 describe("verified ranking contract", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("creates a valid one-time id even without Web Crypto", () => {
+    vi.stubGlobal("crypto", undefined);
+    expect(createClientRunId()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
   it("keeps Normal and Endless in separate leaderboards", () => {
     expect(rankingSlugForMode("normal")).toBe("sabaibu_normal");
     expect(rankingSlugForMode("endless")).toBe("sabaibu_endless");
