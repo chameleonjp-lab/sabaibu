@@ -12,7 +12,7 @@ const RANKING_LIMIT = 5;
 const CLIENT_VERSION = "sabaibu-web-2.0.0-verified-ranking";
 const PENDING_STORAGE_KEY = "sabaibu-ranking-pending-v2";
 
-export const RANKING_ENABLED = true;
+export const RANKING_ENABLED = false;
 
 const GAME_SLUGS: Record<GameMode, string> = {
   normal: "sabaibu_normal",
