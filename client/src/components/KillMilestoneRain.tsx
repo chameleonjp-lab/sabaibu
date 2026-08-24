@@ -43,7 +43,7 @@ export default function KillMilestoneRain({ kills }: { kills: number }) {
     const previousKills = previousKillsRef.current;
 
     if (currentKills < previousKills) {
-      for (const timer of removalTimersRef.current.values()) window.clearTimeout(timer);
+      removalTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       removalTimersRef.current.clear();
       setCelebrations([]);
       previousKillsRef.current = currentKills;
@@ -70,7 +70,7 @@ export default function KillMilestoneRain({ kills }: { kills: number }) {
   }, [kills]);
 
   useEffect(() => () => {
-    for (const timer of removalTimersRef.current.values()) window.clearTimeout(timer);
+    removalTimersRef.current.forEach((timer) => window.clearTimeout(timer));
     removalTimersRef.current.clear();
   }, []);
 
