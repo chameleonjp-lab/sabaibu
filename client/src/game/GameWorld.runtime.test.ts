@@ -137,6 +137,64 @@ describe("GameWorld Normal upgrade and boss reward policy", () => {
     engine.dispose();
   });
 
+  it("caps the normal 周回センチネル at level 7 and turns later picks into healing", () => {
+    stubWindow();
+    const { engine, scene, world } = createNormalWorld(() => undefined);
+    const runtime = world as unknown as {
+      phase: GameSnapshot["phase"];
+      hasOrbit: boolean;
+      orbitTier: number;
+      health: number;
+      maxHealth: number;
+      upgradeOptions: Array<{ id: "orbit" }>;
+    };
+
+    runtime.phase = "upgrade";
+    runtime.hasOrbit = true;
+    runtime.orbitTier = 7;
+    runtime.health = 42;
+    runtime.maxHealth = 100;
+    runtime.upgradeOptions = [{ id: "orbit" }];
+
+    world.chooseUpgrade("orbit");
+
+    expect(runtime.orbitTier).toBe(7);
+    expect(runtime.health).toBe(72);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("deals exactly 2 damage when an enemy touches the player safety ring", () => {
+    stubWindow();
+    const { engine, scene, world } = createNormalWorld(() => undefined);
+    const runtime = world as unknown as {
+      health: number;
+      damageTimer: number;
+      enemies: Array<{
+        enteringContainment: boolean;
+        mesh: { position: { x: number; z: number } };
+      }>;
+      spawnEnemy: (kind?: "scout", highVariant?: string, allowHighVariant?: boolean) => void;
+      updateEnemies: (delta: number) => void;
+    };
+
+    runtime.spawnEnemy("scout", undefined, false);
+    const enemy = runtime.enemies[0];
+    enemy.enteringContainment = false;
+    enemy.mesh.position.x = 0;
+    enemy.mesh.position.z = 0;
+    runtime.damageTimer = 0;
+    runtime.updateEnemies(1 / 60);
+
+    expect(runtime.health).toBe(98);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
   it("moves paired weapon evolution out of the boss reward and applies it automatically at level 3", () => {
     stubWindow();
     const { engine, scene, world } = createNormalWorld(() => undefined);

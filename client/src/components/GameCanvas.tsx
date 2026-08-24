@@ -11,6 +11,7 @@ import { Engine } from "@babylonjs/core/Engines/engine";
 import { createGameScene, type GameHandle } from "@/game/scene";
 import { GAME_ASSETS } from "@/game/assets";
 import { MODULE_UPGRADES, type BossRewardId, type GameMode, type GameSnapshot, type IconId, type ModuleId, type UpgradeId } from "@/game/types";
+import { WEAPON_LIBRARY } from "@/game/weaponCatalog";
 import { useGameAudio } from "@/hooks/useGameAudio";
 import { canSubmitRankingResult, createClientRunId, normalizeRankingName, type RankingRow, type RankingRunSession, useGameRanking } from "@/hooks/useGameRanking";
 import "../settings-console.css";
@@ -245,6 +246,8 @@ export default function GameCanvas() {
   const [sceneError, setSceneError] = useState<string | null>(null);
   const [nameError, setNameError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(settingsPreview);
+  const [weaponLibraryOpen, setWeaponLibraryOpen] = useState(false);
+  const [weaponDetailId, setWeaponDetailId] = useState<UpgradeId | null>(null);
   const [pauseOpen, setPauseOpen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [tutorialComplete, setTutorialComplete] = useState(loadTutorialComplete);
@@ -417,7 +420,7 @@ export default function GameCanvas() {
       setNameError("名前を入力してから出撃してください。");
       return;
     }
-    const safeName = trimmedName || "隊員01";
+    const safeName = trimmedName || "プレイヤー01";
     savePlayerName(safeName);
     setPlayerName(safeName);
     setNameError("");
@@ -427,6 +430,8 @@ export default function GameCanvas() {
     setSceneError(null);
     resetRankingState();
     beginRankingRun(selectedMode, safeName);
+    setWeaponDetailId(null);
+    setWeaponLibraryOpen(false);
     setRunStarted(true);
     setIsPaused(false);
     pauseOpenRef.current = false;
@@ -435,7 +440,9 @@ export default function GameCanvas() {
     settingsOpenRef.current = false;
     setSettingsOpen(false);
     pausedBySettingsRef.current = false;
-    const shouldShowTutorial = !tutorialComplete && !previewAutostart;
+    // 出撃開始時は戦闘へ直行する。移動説明を含む自動チュートリアルで
+    // 初回操作を止めない。
+    const shouldShowTutorial = false;
     setTutorialStep(0);
     tutorialOpenRef.current = shouldShowTutorial;
     pausedByTutorialRef.current = shouldShowTutorial;
@@ -453,6 +460,8 @@ export default function GameCanvas() {
     lifecyclePauseRequestedRef.current = false;
     setSettingsOpen(false);
     settingsOpenRef.current = false;
+    setWeaponDetailId(null);
+    setWeaponLibraryOpen(false);
     pauseOpenRef.current = false;
     setPauseOpen(false);
     tutorialOpenRef.current = false;
@@ -766,7 +775,7 @@ export default function GameCanvas() {
       for (const event of next.soundEvents ?? []) {
         if (event.id <= lastSoundEventIdRef.current) continue;
         audio.play(event.cue);
-        if (event.cue === "kill") setAnnouncement(`撃破数 ${next.kills}。`);
+        if (event.cue === "kill" || event.cue.startsWith("kill-")) setAnnouncement(`撃破数 ${next.kills}。`);
         if (event.cue === "level-up") setAnnouncement(`レベル${next.level}。強化を選んでください。`);
         if (event.cue === "perfect") {
           setAnnouncement("完全回避。短時間、攻撃力が上がります。");
@@ -925,6 +934,24 @@ export default function GameCanvas() {
   const isBossReward = runStarted && snapshot.phase === "bossReward";
   const isUpgrade = runStarted && (snapshot.phase === "upgrade" || snapshot.phase === "bossReward");
   const settingsDialog = settingsOpen && runStarted;
+  const selectedWeapon = weaponDetailId === null ? undefined : WEAPON_LIBRARY.find((weapon) => weapon.id === weaponDetailId);
+
+  const closeWeaponLibrary = useCallback(() => {
+    setWeaponDetailId(null);
+    setWeaponLibraryOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!weaponLibraryOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      if (weaponDetailId !== null) setWeaponDetailId(null);
+      else closeWeaponLibrary();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeWeaponLibrary, weaponDetailId, weaponLibraryOpen]);
 
   const renderSettingsFields = (startScreen = false) => (
     <div className={`settings-fields ${startScreen ? "settings-fields-start" : ""}`}>
@@ -946,14 +973,32 @@ export default function GameCanvas() {
           <h1 id="pre-run-title">ネオン包囲戦<span>：</span>生存戦</h1>
           <p className="pre-run-purpose">自動射撃で敵の波を切り抜け、経験値を集め、装備を進化させる見下ろし型サバイバル。</p>
           <form className="pre-run-form" onSubmit={startRun}>
-            <label className="name-field"><span>隊員名</span><input data-testid="player-name" autoComplete="nickname" maxLength={18} required value={playerName} onChange={(event) => { setPlayerName(event.target.value); if (nameError) setNameError(""); }} placeholder="隊員01" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "name-error" : "name-help"} /><small id="name-help">次回の出撃にも保存されます。</small>{nameError && <strong id="name-error" role="alert">{nameError}</strong>}</label>
+            <label className="name-field"><span>プレイヤー名</span><input data-testid="player-name" autoComplete="nickname" maxLength={18} required value={playerName} onChange={(event) => { setPlayerName(event.target.value); if (nameError) setNameError(""); }} placeholder="プレイヤー01" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "name-error" : "name-help"} /><small id="name-help">次回の出撃にも保存されます。</small>{nameError && <strong id="name-error" role="alert">{nameError}</strong>}</label>
             <fieldset className="mode-picker"><legend>モードを選択</legend><div role="radiogroup" aria-label="ゲームモード"><button data-testid="mode-normal" type="button" role="radio" aria-checked={selectedMode === "normal"} className={selectedMode === "normal" ? "selected" : ""} onClick={() => setSelectedMode("normal")}><b>通常</b><small>10分以内に最終ボスを撃破。</small></button><button data-testid="mode-endless" type="button" role="radio" aria-checked={selectedMode === "endless"} className={selectedMode === "endless" ? "selected" : ""} onClick={() => setSelectedMode("endless")}><b>無限</b><small>終わりなき波。得点を伸ばす。</small></button></div></fieldset>
             <button className="start-run-button" data-testid="start-run" type="submit">出撃開始 <span>開始</span></button>
           </form>
-          <div className="pre-run-controls"><span className="control-chip"><b>タッチ</b> タップ＋ドラッグで移動</span><span className="control-chip"><b>PC</b> W・A・S・D / 矢印キー</span><span className="control-chip"><b>回避</b> ボタンまたはスペース</span></div>
+          <button className="weapon-library-trigger" data-testid="weapon-list" type="button" onClick={() => { setWeaponDetailId(null); setWeaponLibraryOpen(true); }}><span>武器一覧</span><small>効果・レベル・進化条件を見る</small><b>開く</b></button>
           <details className="pre-run-settings" open><summary>出撃前の設定</summary><p>端末に保存されます。出撃中は一時停止画面から変更できます。</p>{renderSettingsFields(true)}</details>
           {sceneError && <p className="scene-error" role="alert">{sceneError}</p>}
         </section>
+        {weaponLibraryOpen && <div className="weapon-library-layer" data-testid="weapon-library" onPointerDown={(event) => { if (event.target === event.currentTarget) closeWeaponLibrary(); }}>
+          <section className="weapon-library-panel" role="dialog" aria-modal="true" aria-labelledby="weapon-library-title" data-dialog-root="true" onPointerDown={(event) => event.stopPropagation()}>
+            <header className="weapon-library-header"><div><p className="modal-eyebrow">装備データベース // 出撃前確認</p><h2 id="weapon-library-title">武器一覧</h2></div><button type="button" className="weapon-library-close" aria-label="武器一覧を閉じる" onClick={closeWeaponLibrary}>×</button></header>
+            <p className="weapon-library-intro">名前だけでなく、攻撃の向き・範囲・役割まで確認できます。カードを選ぶと、レベルごとの変化と進化条件を表示します。</p>
+            <div className="weapon-library-grid">
+              {WEAPON_LIBRARY.map((weapon) => <button key={weapon.id} className="weapon-library-card" type="button" onClick={() => setWeaponDetailId(weapon.id)}><ModuleIcon id={weapon.iconId} className="weapon-library-icon" /><span className="weapon-library-category">{weapon.category}</span><strong>{weapon.title}</strong><small>{weapon.role}</small><p>{weapon.description}</p><i>詳細を見る</i></button>)}
+            </div>
+          </section>
+          {selectedWeapon && <div className="weapon-detail-layer" data-testid="weapon-detail" onPointerDown={() => setWeaponDetailId(null)}>
+            <article className="weapon-detail-panel" role="dialog" aria-modal="true" aria-labelledby="weapon-detail-title" onPointerDown={(event) => event.stopPropagation()}>
+              <header className="weapon-detail-header"><div><p className="modal-eyebrow">{selectedWeapon.code} // {selectedWeapon.category}</p><h2 id="weapon-detail-title"><ModuleIcon id={selectedWeapon.iconId} className="weapon-detail-icon" />{selectedWeapon.title}</h2></div><button type="button" className="weapon-library-close" aria-label="武器の詳細を閉じる" onClick={() => setWeaponDetailId(null)}>×</button></header>
+              <div className="weapon-detail-lead"><strong>{selectedWeapon.role}</strong><p>{selectedWeapon.description}</p></div>
+              <section className="weapon-level-section" aria-labelledby="weapon-level-title"><header><h3 id="weapon-level-title">レベルごとの変化</h3><span>{selectedWeapon.maxLevelText}</span></header><ol>{selectedWeapon.levelDetails.map((detail, index) => <li key={`${selectedWeapon.id}-level-${index}`}><b>Lv.{index + 1}</b><span>{detail.replace(/^レベル\d+：/, "")}</span></li>)}</ol></section>
+              {selectedWeapon.synergy && <section className="weapon-synergy-section"><h3>組み合わせと進化</h3><p>{selectedWeapon.synergy}</p></section>}
+              <p className="weapon-availability">{selectedWeapon.availability}</p>
+            </article>
+          </div>}
+        </div>}
       </main>
     );
   }
@@ -964,7 +1009,7 @@ export default function GameCanvas() {
       <div className="containment-floor-overlay" aria-hidden="true" /><img src={GAME_ASSETS.sigil} className="combat-sigil" alt="" aria-hidden="true" /><div className="threat-perimeter" aria-hidden="true"><i /><i /><i /><i /></div><div className="safety-frame" aria-hidden="true"><span className="frame-code frame-code-a">稼働区画 // 07-A</span><span className="frame-code frame-code-b">境界を守れ</span></div><div className="tactical-vignette" aria-hidden="true" />
       <section className="hud-layer" aria-label="戦闘情報">
         <header className="mission-bar"><div className="brand-lockup"><img src={GAME_ASSETS.sigil} className="brand-sigil" alt="" aria-hidden="true" /><div><p className="eyebrow">{snapshotView.missionLabel ?? "封鎖区域 // セクター07"}</p><h1>ネオン包囲戦<span>：</span>生存戦</h1></div></div><div className="timer-panel"><span className="timer-label">生存時間</span><strong>{formatTime(snapshot.seconds)}</strong>{demoMode && <em>確認用出撃中</em>}</div><div className="kills-panel"><span>撃破数</span><strong>{String(snapshot.kills).padStart(3, "0")}</strong><small>接近中の敵 {snapshot.enemyCount}体</small></div><div className="run-controls"><span className="mode-badge">{MODE_LABELS[currentMode]}</span><button className="pause-trigger" data-testid="pause-run" type="button" disabled={!sceneReady || snapshot.phase !== "playing"} onClick={() => { rememberFocus(); resetJoystick(); pauseOpenRef.current = true; setPausedCommand(true); setPauseOpen(true); }}>一時停止</button></div></header>
-        <aside className={`health-unit ${snapshot.damageFlash > 0 ? "damage-alert" : ""}`} aria-label={`耐久値 ${Math.ceil(snapshot.health)} / ${snapshot.maxHealth}`}><div className="unit-header"><span>耐久値</span><strong>{Math.ceil(snapshot.health)}<i>/{snapshot.maxHealth}</i></strong></div><div className="meter health-meter" role="progressbar" aria-label="耐久値" aria-valuemin={0} aria-valuemax={snapshot.maxHealth} aria-valuenow={Math.max(0, Math.ceil(snapshot.health))}><i style={{ width: `${healthPercent}%` }} /></div><p>隊員 // {playerName.toUpperCase()}</p></aside>
+        <aside className={`health-unit ${snapshot.damageFlash > 0 ? "damage-alert" : ""}`} aria-label={`耐久値 ${Math.ceil(snapshot.health)} / ${snapshot.maxHealth}`}><div className="unit-header"><span>耐久値</span><strong>{Math.ceil(snapshot.health)}<i>/{snapshot.maxHealth}</i></strong></div><div className="meter health-meter" role="progressbar" aria-label="耐久値" aria-valuemin={0} aria-valuemax={snapshot.maxHealth} aria-valuenow={Math.max(0, Math.ceil(snapshot.health))}><i style={{ width: `${healthPercent}%` }} /></div><p>プレイヤー // {playerName.toUpperCase()}</p></aside>
         {snapshot.debugStatus && <aside className="combat-debug-panel">{snapshot.debugStatus}</aside>}
         <aside className="combat-metrics" aria-label="戦闘記録"><span><small>得点</small><b>{formatStat(score)}</b></span><span><small>連続撃破</small><b>{combo} <i>×{comboMultiplier.toFixed(1)}</i></b></span><span><small>最高</small><b>{formatStat(Math.max(bestScores[currentMode], score))}</b></span></aside>
         <div className="mission-objective"><span>{snapshotView.objectiveText ?? "侵入を食い止め、境界を守れ。"}</span>{snapshotView.activeBossLabel && <b>ボス // {snapshotView.activeBossLabel}</b>}{typeof snapshotView.nextBossSeconds === "number" && !snapshotView.activeBossLabel && <small>次のボスまで {Math.ceil(snapshotView.nextBossSeconds)}秒</small>}</div>
@@ -977,7 +1022,7 @@ export default function GameCanvas() {
 
         {tutorialOpen && <div className="tutorial-layer" data-testid="tutorial-layer"><aside className="tutorial-console" role="dialog" aria-modal="true" aria-live="polite" aria-atomic="true" aria-labelledby="tutorial-title" data-dialog-root="true" data-testid="tutorial-dialog"><p className="modal-eyebrow">操作案内 // {tutorialStep + 1}/4</p><h2 id="tutorial-title">{tutorialSteps[tutorialStep].title}</h2><p>{tutorialSteps[tutorialStep].copy}</p><div className="tutorial-progress" role="progressbar" aria-label="案内の進行" aria-valuemin={1} aria-valuemax={tutorialSteps.length} aria-valuenow={tutorialStep + 1}><i style={{ width: `${((tutorialStep + 1) / tutorialSteps.length) * 100}%` }} /></div><footer><button data-testid="tutorial-dismiss" type="button" onClick={completeTutorial}>閉じる</button><button className="primary-dialog-button" data-testid="tutorial-next" type="button" onClick={() => advanceTutorial(true)}>{tutorialStep >= tutorialSteps.length - 1 ? "了解" : "次へ"}</button></footer></aside></div>}
         {isPaused && !settingsDialog && <div className="modal-layer pause-layer"><section className="pause-console" role="dialog" aria-modal="true" aria-labelledby="pause-title" data-dialog-root="true" data-testid="pause-dialog"><p className="modal-eyebrow">出撃状態 // 一時停止</p><h2 id="pause-title">その場で<br /><em>停止中。</em></h2><p>戦闘は停止しています。準備ができたら再開してください。</p><div className="pause-actions"><button className="primary-dialog-button" data-testid="resume-run" type="button" onClick={() => { lifecyclePauseRequestedRef.current = false; pauseOpenRef.current = false; setPausedCommand(false); setPauseOpen(false); restoreFocus(); void audio.unlock(); }}>再開</button><button type="button" onClick={() => openSettings(true)}>設定</button><button type="button" className="danger-dialog-button" onClick={retireRun}>出撃を終了</button></div></section></div>}
-        {settingsDialog && <div className="modal-layer settings-layer"><section className="settings-console settings-dialog" id="player-settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" data-dialog-root="true" data-testid="settings-dialog"><header><div><span>隊員設定</span><h2 id="settings-title">出撃の<em>設定</em></h2></div><button type="button" onClick={closeSettings} aria-label="設定を閉じる">閉じる</button></header><p>端末に保存され、次回の出撃にも適用されます。</p>{renderSettingsFields(false)}<footer><button type="button" onClick={() => { pausedByTutorialRef.current = false; tutorialOpenRef.current = true; settingsOpenRef.current = false; setTutorialStep(0); setTutorialOpen(true); setSettingsOpen(false); setPauseOpen(false); setPausedCommand(true); }}>案内をもう一度見る</button><small>初期値：56% / 100%</small></footer></section></div>}
+        {settingsDialog && <div className="modal-layer settings-layer"><section className="settings-console settings-dialog" id="player-settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" data-dialog-root="true" data-testid="settings-dialog"><header><div><span>プレイヤー設定</span><h2 id="settings-title">出撃の<em>設定</em></h2></div><button type="button" onClick={closeSettings} aria-label="設定を閉じる">閉じる</button></header><p>端末に保存され、次回の出撃にも適用されます。</p>{renderSettingsFields(false)}<footer><small>初期値：56% / 100%</small></footer></section></div>}
         {isUpgrade && <div className="modal-layer"><section className="upgrade-console" role="dialog" aria-modal="true" aria-labelledby="upgrade-title" data-dialog-root="true" data-testid="upgrade-dialog"><p className="modal-eyebrow">{isBossReward ? "ボス報酬 // 選択可能" : snapshot.moduleMilestone ? "モジュール枠を拡張" : "強化候補を確認"}</p><h2 id="upgrade-title">{isBossReward ? <>ボス報酬を<br /><em>選択</em></> : <>戦場の<br /><em>強化を選択</em></>}</h2><p className="modal-copy">{isBossReward ? "撃破報酬をひとつ選び、戦闘を再開してください。" : snapshot.moduleMilestone ? "新規攻撃モジュール候補です。ひとつだけ導入してください。" : "既存装備の強化候補から、ひとつだけ承認してください。"} {!isBossReward && <>攻撃枠 {snapshot.weaponCount}/{snapshot.weaponLimit}（レール含む）・補助枠 {snapshot.utilityCount}/{snapshot.utilityLimit}。</>}</p>{(isBossReward || bossRewards.length > 0) && <section className="boss-reward-panel" aria-labelledby="boss-reward-title"><header><span>ボス報酬</span><h3 id="boss-reward-title">報酬を選ぶ</h3></header>{bossRewards.length > 0 ? <div className="boss-reward-grid">{bossRewards.map((reward) => <button key={reward.id} type="button" className="boss-reward-card" disabled={!reward.enabled} onClick={() => selectBossReward(reward.id)}><strong>{reward.title}</strong><small>{reward.description}</small><i>{reward.enabled ? "取得" : "選択不可"}</i></button>)}</div> : <p className="boss-reward-empty">報酬候補を読み込み中です。</p>}</section>}{!isBossReward && <><div className="upgrade-actions"><button className="reroll-button" type="button" onClick={rerollUpgrades} disabled={snapshot.rerollsRemaining <= 0}>引き直す <span>{snapshot.rerollsRemaining}/3</span></button><small>候補を再抽選</small></div><div className="upgrade-grid">{snapshot.upgrades.map((upgrade, index) => { const current = upgrade.currentLevel !== undefined ? `レベル${upgrade.currentLevel}` : "現在"; const next = upgrade.nextLevel !== undefined ? `レベル${upgrade.nextLevel}` : "次"; const role = upgrade.role ?? (upgrade.category === "module" ? "戦場モジュール" : "標準武器"); const change = upgrade.changeSummary ?? upgrade.description; const synergy = upgrade.synergy; return <button key={upgrade.id} data-testid="upgrade-card" type="button" className="upgrade-card" onClick={() => selectUpgrade(upgrade.id)}><span className="choice-number">0{index + 1}</span><ModuleIcon id={upgrade.iconId} className="upgrade-symbol" /><span className="upgrade-code">{upgrade.code}</span><strong>{upgrade.title}</strong><span className="upgrade-role">{role}</span><span className="upgrade-delta"><b>{current}</b><i>→</i><b>{next}</b></span><small>{change}</small>{synergy && <span className="upgrade-synergy"><b>組合せ</b>{synergy}</span>}<i className="install-label">決定</i></button>; })}</div></>}</section></div>}
         {isGameover && <div className="modal-layer"><section className={`failure-console result-console result-${snapshotView.outcome ?? "failed"}`} role="dialog" aria-modal="true" aria-labelledby="result-title" data-dialog-root="true" data-testid="result-dialog"><p className="modal-eyebrow danger">戦闘報告 // {resultOutcome}</p><h2 id="result-title">{resultOutcome === "成功" ? <>作戦<br />成功。</> : resultOutcome === "終了" ? <>出撃<br />終了。</> : <>信号<br /><em>断絶。</em></>}</h2><div className="result-summary"><span><small>得点</small><b>{formatStat(score)}</b></span><span><small>生存時間</small><b>{formatTime(snapshot.seconds)}</b></span><span><small>撃破数</small><b>{formatStat(snapshot.kills)}</b></span><span><small>最終レベル</small><b>レベル{String(snapshot.level).padStart(2, "0")}</b></span></div><div className="result-goal-stats"><span><small>連続撃破</small><b>{combo} <i>×{comboMultiplier.toFixed(1)}</i></b></span><span><small>最大連続撃破</small><b>{maxCombo}</b></span><span><small>完全回避</small><b>{perfectDodges}</b></span><span><small>撃破ボス数</small><b>{bossesDefeated}</b></span></div><section className="score-breakdown" aria-label="得点の加点と減点"><header><span>得点内訳</span><b>{formatStat(snapshot.scoreBreakdown.total)}点</b></header><div className="score-positive"><span>撃破数による加点<b>+{formatStat(snapshot.scoreBreakdown.killPoints)}</b></span><span>{currentMode === "normal" ? "クリア時間による加点" : "生存時間による加点"}<b>+{formatStat(snapshot.scoreBreakdown.timePoints)}</b></span><span>レベルによる加点<b>+{formatStat(snapshot.scoreBreakdown.levelPoints)}</b></span></div><div className="score-negative"><span>被弾回数 {snapshot.damageHits}回<b>-{formatStat(snapshot.scoreBreakdown.hitPenalty)}</b></span><span>被ダメージ {snapshot.damageTaken}<b>-{formatStat(snapshot.scoreBreakdown.damagePenalty)}</b></span></div></section>{snapshotView.deathCause && resultOutcome !== "成功" && <p className="death-cause">原因 // {snapshotView.deathCause}</p>}{snapshotView.dodgeBoostSeconds !== undefined && <p className="dodge-result">回避強化 // {Number(snapshotView.dodgeBoostSeconds).toFixed(1)}秒</p>}{evolvedWeapons.length > 0 && <section className="evolution-result" aria-label="完成した進化武器"><header>完成した進化武器</header><p>{evolvedWeaponLabels.join("・")}</p></section>}<p className="total-damage-result">総ダメージ // {formatStat(snapshot.totalDamage)}</p><section className="result-breakdown" aria-label="武器別戦闘統計"><header><span>武器別戦績</span><small>ダメージ / 撃破</small></header><div className="result-stat-list">{snapshot.resultStats.map((stat, index) => <div className="result-stat-row" key={stat.id}><span className="result-rank">{String(index + 1).padStart(2, "0")}</span><ModuleIcon id={stat.iconId} className="result-stat-icon" /><strong>{stat.label}<small>レベル{String(stat.tier).padStart(2, "0")}</small></strong><b>{formatStat(stat.damage)}<small>ダメージ</small></b><i>{formatStat(stat.kills)}<small>撃破</small></i></div>)}</div></section>{rankingVisible && <section className="result-ranking-panel" data-testid="result-ranking" aria-labelledby="result-ranking-title"><header><div><span>全体ランキング // {MODE_LABELS[currentMode]}</span><h3 id="result-ranking-title">上位記録</h3></div><small>{rankingStatus === "submitting" ? "送信中" : rankingStatus === "submitted" ? "保存済み" : rankingStatus === "failed" ? "再送可能" : "待機中"}</small></header><p className={`result-ranking-status ranking-status-${rankingStatus}`} data-testid="ranking-status" aria-live="polite">{rankingMessage || (ranking.enabled ? "正規結果を検証してランキングへ送信します。" : "ランキング連携を利用できません。端末記録のみ保存します。")}</p>{rankingRows.length > 0 ? <ol className="result-ranking-list">{rankingRows.map((row) => <li key={`${row.rank}-${row.displayName}`} className={row.displayName === rankingCurrentName ? "is-current-player" : undefined}><b>{row.rank}</b><span>{row.displayName}{row.displayName === rankingCurrentName && <small>あなた</small>}</span><strong>{formatStat(row.bestScore)}</strong></li>)}</ol> : <p className="result-ranking-empty">{rankingLoadError || (rankingStatus === "submitting" ? "ランキングを読み込み中…" : "まだランキング記録がありません。")}</p>}{rankingStatus === "failed" && <button className="ranking-retry-button" data-testid="ranking-retry" type="button" onClick={retryRankingSubmission}>記録を再送</button>}</section>}<p>記録された戦闘結果を確認し、次の出撃に備えてください。</p><p className="best-score-line">{MODE_LABELS[currentMode]}の最高得点 // {formatStat(bestScores[currentMode])}</p><div className="result-actions"><button className="primary-dialog-button" data-testid="retry-run" type="button" onClick={retryRun}>もう一度出撃 <span>開始</span></button><button data-testid="return-title" type="button" onClick={returnToTitle}>タイトルへ戻る</button></div></section></div>}
       </section>

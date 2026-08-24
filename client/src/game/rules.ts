@@ -3,8 +3,15 @@ import type { EvolutionId, GameMode, GameOutcome, ModuleId, ScoreBreakdown } fro
 /** The normal run's fixed objective and scheduled boss encounters. */
 export const NORMAL_TARGET_SECONDS = 600;
 export const NORMAL_BOSS_TIMINGS = [180, 360, 555] as const;
-/** Final boss HP multiplier tuned for the 45-second 09:15–10:00 window. */
-export const NORMAL_FINAL_BOSS_HP_MULTIPLIER = 12;
+/** Final boss HP multiplier: the previous 12x value increased by the requested 1.5x. */
+export const NORMAL_FINAL_BOSS_HP_MULTIPLIER = 18;
+
+/** Normal-mode 周回センチネル progression and overflow reward. */
+export const NORMAL_SENTINEL_MAX_LEVEL = 7;
+export const NORMAL_SENTINEL_OVERFLOW_HEAL = 30;
+
+/** Contact with the player's visible safety ring is a fixed, separate hit. */
+export const PLAYER_RING_CONTACT_DAMAGE = 2;
 
 /** Hard encounter-density limits used by normal mode. The boss may coexist with 56 regular enemies. */
 export const NORMAL_MAX_ENEMIES = 57;
