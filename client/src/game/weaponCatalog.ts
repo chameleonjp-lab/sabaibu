@@ -26,8 +26,8 @@ const categoryById: Record<UpgradeId, WeaponLibraryCategory> = {
   nova: "攻撃モジュール",
   mirage: "攻撃モジュール",
   pylon: "攻撃モジュール",
-  reactive: "攻撃モジュール",
-  cryo: "攻撃モジュール",
+  reactive: "機能・防御",
+  cryo: "機能・防御",
   ricochet: "攻撃モジュール",
   gravity: "攻撃モジュール",
   decoy: "攻撃モジュール",
@@ -46,7 +46,7 @@ const categoryById: Record<UpgradeId, WeaponLibraryCategory> = {
   thermal: "攻撃モジュール",
   sonic: "攻撃モジュール",
   cluster: "攻撃モジュール",
-  corrosion: "攻撃モジュール",
+  corrosion: "機能・防御",
 };
 
 const roleById: Record<UpgradeId, string> = {
