@@ -9,6 +9,7 @@ import {
   DODGE_INVULNERABILITY_SECONDS,
   DODGE_PERFECT_WINDOW_SECONDS,
   EVOLUTION_RECIPES,
+  KILL_MILESTONE_INTERVAL,
   NORMAL_BOSS_TIMINGS,
   NORMAL_FINAL_BOSS_HP_MULTIPLIER,
   NORMAL_MAX_ENEMIES,
@@ -22,6 +23,7 @@ import {
   calculateScoreBreakdown,
   canEvolve,
   getDueNormalBossStage,
+  getCrossedKillMilestones,
   getEvolutionRecipe,
   getNextNormalBossTime,
   getSecondsUntilNextNormalBoss,
@@ -61,6 +63,15 @@ describe("normal-mode rules", () => {
     expect(DODGE_INVULNERABILITY_SECONDS).toBe(0.28);
     expect(DODGE_PERFECT_WINDOW_SECONDS).toBe(0.34);
     expect(DODGE_DISTANCE).toBe(3.4);
+  });
+
+  it("reports every crossed 100-kill celebration once", () => {
+    expect(KILL_MILESTONE_INTERVAL).toBe(100);
+    expect(getCrossedKillMilestones(99, 100)).toEqual([100]);
+    expect(getCrossedKillMilestones(100, 100)).toEqual([]);
+    expect(getCrossedKillMilestones(100, 199)).toEqual([]);
+    expect(getCrossedKillMilestones(99, 201)).toEqual([100, 200]);
+    expect(getCrossedKillMilestones(250, 0)).toEqual([]);
   });
 
   it("calculates Normal additions and deductions transparently", () => {
