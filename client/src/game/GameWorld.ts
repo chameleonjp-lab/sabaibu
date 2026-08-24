@@ -25,7 +25,10 @@ import {
   NORMAL_FINAL_BOSS_HP_MULTIPLIER,
   NORMAL_MAX_ENEMIES,
   NORMAL_MAX_ENEMIES_PER_SECOND,
+  NORMAL_SENTINEL_MAX_LEVEL,
+  NORMAL_SENTINEL_OVERFLOW_HEAL,
   NORMAL_TARGET_SECONDS,
+  PLAYER_RING_CONTACT_DAMAGE,
   UTILITY_SLOT_LIMIT,
   calculateScoreBreakdown,
   getComboMultiplier,
@@ -617,7 +620,11 @@ export class GameWorld {
     } else if (id === "scatter") {
       this.activateScatter();
     } else if (id === "orbit") {
-      this.activateOrbit();
+      if (this.mode === "normal" && this.hasOrbit && this.orbitTier >= NORMAL_SENTINEL_MAX_LEVEL) {
+        this.health = Math.min(this.maxHealth, this.health + NORMAL_SENTINEL_OVERFLOW_HEAL);
+      } else {
+        this.activateOrbit();
+      }
     } else if (id === "relay") {
       if (this.relayTier < 4) {
         this.relayTier += 1;
@@ -1233,9 +1240,9 @@ export class GameWorld {
     const baseHp = 14 + Math.floor(this.elapsed / 25) * 4;
     boss.milestoneBoss = true;
     boss.missionBossStage = stage;
-    // The final boss has only the 09:15–10:00 window. A 90x multiplier made
-    // the guaranteed Rail-only damage mathematically unable to clear Normal;
-    // 12x keeps the fight meaningful while leaving room for missed shots.
+    // The final boss has only the 09:15–10:00 window. Keep the requested 1.5x
+    // increase in the shared rules constant so tests and the live simulation
+    // cannot drift apart.
     boss.hp = baseHp * (stage === 3 ? NORMAL_FINAL_BOSS_HP_MULTIPLIER : 40);
     boss.maxHp = boss.hp;
     boss.scale *= stage === 3 ? 2.25 : 1.95;
@@ -3201,9 +3208,10 @@ export class GameWorld {
       this.hasOrbit = true;
       this.orbitTier = 1;
     } else {
-      this.orbitTier += 1;
+      const maximumTier = this.mode === "normal" ? NORMAL_SENTINEL_MAX_LEVEL : 3;
+      this.orbitTier = Math.min(maximumTier, this.orbitTier + 1);
     }
-    const desired = 2 + Math.min(2, this.orbitTier - 1);
+    const desired = 2 + Math.min(5, this.orbitTier - 1);
     while (this.orbitBlades.length < desired) {
       const blade = MeshBuilder.CreateBox("arc-sentry", { width: 0.23, height: 0.22, depth: 1.12 }, this.scene);
       blade.material = this.projectileMaterial;
@@ -3317,7 +3325,7 @@ export class GameWorld {
       enemy.hitFlash -= delta;
       enemy.mesh.scaling.setAll(enemy.scale * (enemy.hitFlash > 0 ? 1.18 : 1));
       if (!decoy && this.playerRingTouchesEnemy(enemy) && this.damageTimer <= 0) {
-        this.damagePlayer(Math.min(9, enemy.contactDamage + Math.floor(this.elapsed / 70)), 0.6, "contact");
+        this.damagePlayer(PLAYER_RING_CONTACT_DAMAGE, 0.6, "contact");
         if (!this.isSimulationActive()) return;
       }
     }
@@ -3771,7 +3779,7 @@ export class GameWorld {
     enemy.bossMarker?.dispose();
     enemy.mesh.dispose();
     this.kills += 1;
-    this.queueSound("kill");
+    this.queueSound(enemy.kind === "bulwark" ? "kill-bulwark" : enemy.kind === "striker" ? "kill-striker" : "kill-scout");
     this.combo += 1;
     this.comboTimer = COMBO_WINDOW_SECONDS;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
@@ -4183,7 +4191,10 @@ export class GameWorld {
     }
     if (id === "pulse") return this.weaponTier < 3;
     if (id === "scatter") return this.hasScatter ? this.scatterTier < 3 : this.getAttackSlotCount() < this.getWeaponLimit();
-    if (id === "orbit") return this.hasOrbit ? this.orbitTier < 3 : this.getAttackSlotCount() < this.getWeaponLimit();
+    if (id === "orbit") {
+      if (!this.hasOrbit) return this.getAttackSlotCount() < this.getWeaponLimit();
+      return this.mode === "normal" ? true : this.orbitTier < 3;
+    }
     if (id === "relay") return this.relayTier > 0 ? this.relayTier < 4 : this.getUtilityCount() < UTILITY_SLOT_LIMIT;
     if (id === "barrier") {
       if (this.mode === "normal") return false;
@@ -4281,7 +4292,9 @@ export class GameWorld {
 
   private describeUpgradeOption(option: UpgradeOption): UpgradeOption {
     const currentLevel = this.getUpgradeLevel(option.id);
-    const nextLevel = currentLevel + 1;
+    const nextLevel = option.id === "orbit" && this.mode === "normal"
+      ? Math.min(NORMAL_SENTINEL_MAX_LEVEL, currentLevel + 1)
+      : currentLevel + 1;
     const moduleId = this.isModuleId(option.id) ? option.id : undefined;
     const recipe = moduleId
       ? EVOLUTION_RECIPES.find((candidate) => candidate.modules.includes(moduleId))
@@ -4331,7 +4344,11 @@ export class GameWorld {
   private getUpgradeChangeSummary(id: UpgradeId, currentLevel: number, nextLevel: number) {
     if (id === "pulse") return this.weaponTier < 3 ? `ダメージ ${this.damage} → ${this.damage + 8}` : `熟練増幅 ×${this.attackAmplifier.toFixed(2)} → ×${Math.min(1.8, this.attackAmplifier + 0.02).toFixed(2)}`;
     if (id === "scatter") return currentLevel === 0 ? "移動方向へ3発の散弾を追加" : `1発ダメージ ${10 + currentLevel * 5} → ${10 + nextLevel * 5}`;
-    if (id === "orbit") return currentLevel === 0 ? "周囲を守るセンチネル2基を追加" : `センチネル ${2 + Math.min(2, currentLevel - 1)} → ${2 + Math.min(2, nextLevel - 1)}基`;
+    if (id === "orbit") {
+      if (currentLevel === 0) return "周囲を回る刃2基を追加。近づいた敵に接触攻撃";
+      if (this.mode === "normal" && currentLevel >= NORMAL_SENTINEL_MAX_LEVEL) return `上限レベル${NORMAL_SENTINEL_MAX_LEVEL}。選ぶと体力を${NORMAL_SENTINEL_OVERFLOW_HEAL}回復`;
+      return `センチネル ${2 + Math.min(5, currentLevel - 1)} → ${2 + Math.min(5, nextLevel - 1)}基 / 攻撃力も上昇`;
+    }
     if (id === "relay") return this.relayTier < 4 ? `射撃間隔 ${this.shotDelay.toFixed(2)} → ${Math.max(0.16, this.shotDelay - 0.08).toFixed(2)}秒 / 移動+0.7` : `熟練機動 // 移動速度 ${this.playerSpeed.toFixed(2)} → ${Math.min(12.5, this.playerSpeed + 0.18).toFixed(2)}`;
     if (id === "barrier") return this.barrierTier < 4 ? `最大耐久 ${this.maxHealth} → ${Math.min(PLAYER_MAX_HEALTH_CAP, this.maxHealth + 8)} / 30回復` : `熟練整備 // 20回復 / 回収範囲を微増`;
     if (this.isModuleId(id)) return currentLevel === 0 ? `${this.getUpgradeRole(id)}を新規導入` : `主効果をレベル${currentLevel} → レベル${nextLevel}へ強化`;

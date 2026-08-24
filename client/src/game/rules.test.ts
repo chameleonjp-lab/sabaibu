@@ -13,7 +13,10 @@ import {
   NORMAL_FINAL_BOSS_HP_MULTIPLIER,
   NORMAL_MAX_ENEMIES,
   NORMAL_MAX_ENEMIES_PER_SECOND,
+  NORMAL_SENTINEL_MAX_LEVEL,
+  NORMAL_SENTINEL_OVERFLOW_HEAL,
   NORMAL_TARGET_SECONDS,
+  PLAYER_RING_CONTACT_DAMAGE,
   SCORE_RULES,
   UTILITY_SLOT_LIMIT,
   calculateScoreBreakdown,
@@ -32,7 +35,10 @@ describe("normal-mode rules", () => {
   it("keeps the objective and all boss boundaries explicit", () => {
     expect(NORMAL_TARGET_SECONDS).toBe(600);
     expect(NORMAL_BOSS_TIMINGS).toEqual([180, 360, 555]);
-    expect(NORMAL_FINAL_BOSS_HP_MULTIPLIER).toBe(12);
+    expect(NORMAL_FINAL_BOSS_HP_MULTIPLIER).toBe(18);
+    expect(NORMAL_SENTINEL_MAX_LEVEL).toBe(7);
+    expect(NORMAL_SENTINEL_OVERFLOW_HEAL).toBe(30);
+    expect(PLAYER_RING_CONTACT_DAMAGE).toBe(2);
     expect(getDueNormalBossStage(179.999, new Set())).toBeUndefined();
     expect(getDueNormalBossStage(180, new Set())).toBe(1);
     expect(getDueNormalBossStage(360, new Set([1]))).toBe(2);
