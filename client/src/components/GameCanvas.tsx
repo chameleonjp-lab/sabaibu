@@ -12,6 +12,7 @@ import { createGameScene, type GameHandle } from "@/game/scene";
 import { GAME_ASSETS } from "@/game/assets";
 import { MODULE_UPGRADES, type BossRewardId, type GameMode, type GameSnapshot, type IconId, type ModuleId, type UpgradeId } from "@/game/types";
 import { WEAPON_LIBRARY } from "@/game/weaponCatalog";
+import KillMilestoneRain from "@/components/KillMilestoneRain";
 import ShareButton from "@/components/ShareButton";
 import { useGameAudio } from "@/hooks/useGameAudio";
 import { canSubmitRankingResult, createClientRunId, normalizeRankingName, type RankingRow, type RankingRunSession, useGameRanking } from "@/hooks/useGameRanking";
@@ -1014,6 +1015,7 @@ export default function GameCanvas() {
   return (
     <main ref={mainRef} className={`game-shell viewport-${viewportMode} ${isPaused ? "is-paused" : ""} ${healthPercent <= 25 ? "low-health" : ""}`} onContextMenu={(event) => event.preventDefault()} style={{ "--stick-opacity": playerSettings.stickOpacity } as CSSProperties} aria-label="サバサバ" data-testid="game-shell" data-phase={snapshot.phase} data-mode={currentMode}>
       <canvas ref={canvasRef} className="game-canvas" style={{ touchAction: "none" }} aria-label="3D戦場" />
+      <KillMilestoneRain kills={snapshot.kills} />
       <div className="containment-floor-overlay" aria-hidden="true" /><img src={GAME_ASSETS.sigil} className="combat-sigil" alt="" aria-hidden="true" /><div className="threat-perimeter" aria-hidden="true"><i /><i /><i /><i /></div><div className="safety-frame" aria-hidden="true"><span className="frame-code frame-code-a">稼働区画 // 07-A</span><span className="frame-code frame-code-b">境界を守れ</span></div><div className="tactical-vignette" aria-hidden="true" />
       <section className="hud-layer" aria-label="戦闘情報">
         <header className="mission-bar"><div className="brand-lockup"><img src={GAME_ASSETS.sigil} className="brand-sigil" alt="" aria-hidden="true" /><div><p className="eyebrow">{snapshotView.missionLabel ?? "封鎖区域 // セクター07"}</p><h1>サバサバ</h1></div></div><div className="timer-panel"><span className="timer-label">生存時間</span><strong>{formatTime(snapshot.seconds)}</strong>{demoMode && <em>確認用出撃中</em>}</div><div className="kills-panel"><span>撃破数</span><strong>{String(snapshot.kills).padStart(3, "0")}</strong><small>接近中の敵 {snapshot.enemyCount}体</small></div><div className="run-controls"><span className="mode-badge">{MODE_LABELS[currentMode]}</span><button className="pause-trigger" data-testid="pause-run" type="button" disabled={!sceneReady || snapshot.phase !== "playing"} onClick={() => { rememberFocus(); resetJoystick(); pauseOpenRef.current = true; setPausedCommand(true); setPauseOpen(true); }}>一時停止</button></div></header>

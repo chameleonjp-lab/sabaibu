@@ -13,6 +13,9 @@ export const NORMAL_SENTINEL_OVERFLOW_HEAL = 30;
 /** Contact with the player's visible safety ring is a fixed, separate hit. */
 export const PLAYER_RING_CONTACT_DAMAGE = 2;
 
+/** Celebrate every 100 confirmed defeats. */
+export const KILL_MILESTONE_INTERVAL = 100;
+
 /** Hard encounter-density limits used by normal mode. The boss may coexist with 56 regular enemies. */
 export const NORMAL_MAX_ENEMIES = 57;
 export const NORMAL_MAX_ENEMIES_PER_SECOND = 4;
@@ -89,6 +92,21 @@ const EVOLUTION_RECIPE_MAP: Readonly<Record<EvolutionId, EvolutionRecipe>> = Obj
 const safeInteger = (value: number, maximum = Number.MAX_SAFE_INTEGER) => (
   Number.isFinite(value) ? Math.max(0, Math.min(maximum, Math.trunc(value))) : 0
 );
+
+/** Return every 100-kill boundary crossed by the latest simulation update. */
+export function getCrossedKillMilestones(previousKills: number, currentKills: number): number[] {
+  const previous = safeInteger(previousKills, 100_000);
+  const current = safeInteger(currentKills, 100_000);
+  if (current <= previous) return [];
+
+  const milestones: number[] = [];
+  let milestone = (Math.floor(previous / KILL_MILESTONE_INTERVAL) + 1) * KILL_MILESTONE_INTERVAL;
+  while (milestone <= current) {
+    milestones.push(milestone);
+    milestone += KILL_MILESTONE_INTERVAL;
+  }
+  return milestones;
+}
 
 /** Calculate all positive and negative score components without hidden bonuses. */
 export function calculateScoreBreakdown(input: ScoreInput): ScoreBreakdown {
