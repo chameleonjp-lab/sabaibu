@@ -33,6 +33,7 @@ import {
   UTILITY_SLOT_LIMIT,
   calculateScoreBreakdown,
   canEvolve,
+  consumeSimulationDebt,
   getDueNormalBossStage,
   getCrossedKillMilestones,
   getEvolutionRecipe,
@@ -127,6 +128,11 @@ describe("normal-mode rules", () => {
     }
     expect(splitSimulationDelta(0.2)).toHaveLength(4);
     expect(splitSimulationDelta(0.2).reduce((sum, step) => sum + step, 0)).toBeCloseTo(0.2, 10);
+  });
+
+  it("discards accumulated frame debt while the game is not advancing", () => {
+    expect(consumeSimulationDebt(4.9, 0.2, false)).toEqual({ budget: 0, remainingDebt: 0 });
+    expect(consumeSimulationDebt(0, 0.2, true)).toEqual({ budget: 0.2, remainingDebt: 0 });
   });
 
   it("bounds throttled-frame debt while preserving a one-second frame budget", () => {
