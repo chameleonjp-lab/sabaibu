@@ -13,6 +13,9 @@ export const NORMAL_SENTINEL_OVERFLOW_HEAL = 30;
 /** Contact with the player's visible safety ring is a fixed, separate hit. */
 export const PLAYER_RING_CONTACT_DAMAGE = 2;
 
+/** Shared cap for every maximum-health increase, including Endless boss rewards. */
+export const PLAYER_MAX_HEALTH_CAP = 200;
+
 /** Celebrate every 100 confirmed defeats. */
 export const KILL_MILESTONE_INTERVAL = 100;
 
