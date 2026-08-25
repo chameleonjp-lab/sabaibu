@@ -221,7 +221,8 @@ export function splitSimulationDelta(delta: number, maximumStep = 0.05): number[
 }
 
 /** Add one render interval to the simulation debt and consume a bounded amount. */
-export function consumeSimulationDebt(currentDebt: number, frameDelta: number) {
+export function consumeSimulationDebt(currentDebt: number, frameDelta: number, shouldAdvance = true) {
+  if (!shouldAdvance) return { budget: 0, remainingDebt: 0 };
   const safeDebt = Number.isFinite(currentDebt) ? Math.max(0, currentDebt) : 0;
   const safeFrameDelta = Number.isFinite(frameDelta) ? Math.max(0, frameDelta) : 0;
   const debt = Math.min(SIMULATION_DEBT_CAP_SECONDS, safeDebt + safeFrameDelta);
