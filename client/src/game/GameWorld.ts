@@ -12,7 +12,7 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import type { Scene } from "@babylonjs/core/scene";
 import { GAME_ASSETS } from "./assets";
 import { ARENA_OBSTACLES, PLAYER_OBSTACLE_COLLISION_RADIUS } from "./arena";
-import { MODULE_UPGRADES, STANDARD_UPGRADES, UPGRADE_CATALOG, type AttackId, type AttackStatus, type BossRewardId, type EvolutionId, type GameMode, type GameOutcome, type GamePhase, type GameSnapshot, type GameSoundCue, type ModuleId, type SoundEvent, type UpgradeId, type UpgradeOption } from "./types";
+import { MODULE_UPGRADES, STANDARD_UPGRADES, UPGRADE_CATALOG, type AttackId, type AttackStatus, type BossRewardId, type EvolutionId, type GameDebugMetrics, type GameMode, type GameOutcome, type GamePhase, type GameSnapshot, type GameSoundCue, type ModuleId, type SoundEvent, type UpgradeId, type UpgradeOption } from "./types";
 import {
   ATTACK_SLOT_LIMIT,
   COMBO_WINDOW_SECONDS,
@@ -23,7 +23,10 @@ import {
   EVOLUTION_RECIPES,
   NORMAL_BOSS_TIMINGS,
   NORMAL_FINAL_BOSS_HP_MULTIPLIER,
+  ENDLESS_MAX_ENEMIES,
+  ENDLESS_MAX_REGULAR_ENEMIES,
   NORMAL_MAX_ENEMIES,
+  NORMAL_MAX_REGULAR_ENEMIES,
   NORMAL_MAX_ENEMIES_PER_SECOND,
   NORMAL_SENTINEL_MAX_LEVEL,
   NORMAL_SENTINEL_OVERFLOW_HEAL,
@@ -1416,9 +1419,9 @@ export class GameWorld {
     if (this.elapsed < 180) return { enemyCap: 46, batch: 1, interval: 0.46 };
     if (this.elapsed < 300) return { enemyCap: 50, batch: 2, interval: 0.67 };
     if (this.elapsed < 420) return { enemyCap: 54, batch: 2, interval: 0.61 };
-    if (this.elapsed < 540) return { enemyCap: NORMAL_MAX_ENEMIES, batch: 2, interval: 0.56 };
+    if (this.elapsed < 540) return { enemyCap: NORMAL_MAX_REGULAR_ENEMIES, batch: 2, interval: 0.56 };
     const interval = Math.max(2 / NORMAL_MAX_ENEMIES_PER_SECOND, 0.5);
-    return { enemyCap: NORMAL_MAX_ENEMIES, batch: 2, interval };
+    return { enemyCap: NORMAL_MAX_REGULAR_ENEMIES, batch: 2, interval };
   }
 
   private updateEncounterDirector(delta: number) {
@@ -1457,9 +1460,9 @@ export class GameWorld {
     const baselineBatch = this.elapsed >= 100 ? 2 : 1;
     const baselineInterval = Math.max(0.6, 0.9 - this.elapsed / 150);
     const rewardTier = this.getHighLevelRewardTier();
-    if (rewardTier === 0) return { enemyCap: baselineCap, batch: baselineBatch, interval: baselineInterval };
+    if (rewardTier === 0) return { enemyCap: Math.min(ENDLESS_MAX_REGULAR_ENEMIES, baselineCap), batch: baselineBatch, interval: baselineInterval };
     return {
-      enemyCap: Math.max(baselineCap, 58 + (rewardTier - 1) * 12),
+      enemyCap: Math.min(ENDLESS_MAX_REGULAR_ENEMIES, Math.max(baselineCap, 58 + (rewardTier - 1) * 12)),
       batch: Math.max(baselineBatch, rewardTier >= 3 ? 3 : 2),
       interval: Math.min(baselineInterval, Math.max(0.42, 0.62 - (rewardTier - 1) * 0.06)),
     };
@@ -3341,7 +3344,9 @@ export class GameWorld {
     if (enemy.summonTimer > 0) return;
     enemy.summonTimer = enemy.bossEnraged ? 3.8 : 5.4;
     const liveAdds = this.enemies.filter((candidate) => !candidate.milestoneBoss).length;
-    const addCount = Math.max(0, Math.min(enemy.bossEnraged ? 4 : 3, 7 - liveAdds));
+    const totalEnemyCap = this.mode === "normal" ? NORMAL_MAX_ENEMIES : ENDLESS_MAX_ENEMIES;
+    const availableSlots = Math.max(0, totalEnemyCap - this.enemies.length);
+    const addCount = Math.max(0, Math.min(enemy.bossEnraged ? 4 : 3, 7 - liveAdds, availableSlots));
     for (let index = 0; index < addCount; index += 1) {
       this.spawnEnemy(index === 2 ? "striker" : "scout", undefined, false);
       const add = this.enemies[this.enemies.length - 1];
@@ -4027,6 +4032,32 @@ export class GameWorld {
     return material;
   }
 
+  private getDebugMetrics(): GameDebugMetrics {
+    const transientEffects = this.projectiles.length
+      + this.shockwaves.length
+      + this.ricochetShots.length
+      + this.gravityCores.length
+      + this.decoys.length
+      + this.arcShells.length
+      + this.splitShells.length
+      + this.returnBlades.length
+      + this.energyTraces.length
+      + this.mines.length
+      + this.skyfallStrikes.length
+      + this.needleDrops.length
+      + this.idleNeedles.length
+      + this.harpoons.length
+      + this.clusterCores.length
+      + this.clusterShards.length;
+    return {
+      sceneMeshes: this.scene.meshes.length,
+      enemies: this.enemies.length,
+      transientEffects,
+      drops: this.gems.length + this.recoveryItems.length + this.magnetItems.length,
+      soundEvents: this.soundEvents.length,
+    };
+  }
+
   private emitSnapshot() {
     const attacks: AttackStatus[] = [
       { id: "rail", label: "レールパルス", detail: "自動追尾", iconId: "rail", tier: this.weaponTier, active: true },
@@ -4087,6 +4118,8 @@ export class GameWorld {
       : this.mode === "normal"
         ? `${this.activeEncounterLabel} // ${Math.max(0, NORMAL_TARGET_SECONDS - Math.floor(this.elapsed))}秒後の作戦完了を目指す`
         : `${this.activeEncounterLabel} // 限界まで成長し、自己最高スコアを更新`;
+    const debugMetrics = this.debugMode ? this.getDebugMetrics() : undefined;
+    const debugResourceSuffix = debugMetrics ? ` MESH:${debugMetrics.sceneMeshes} FX:${debugMetrics.transientEffects} DROP:${debugMetrics.drops} SND:${debugMetrics.soundEvents}` : "";
     this.onSnapshot({
       phase: this.phase,
       mode: this.mode,
@@ -4128,7 +4161,8 @@ export class GameWorld {
       rerollsRemaining: this.rerollsRemaining,
       enemyCount: this.enemies.length,
       moduleMilestone: this.isModuleMilestone(),
-      debugStatus: this.debugMode ? `${this.auditModule ? `AUDIT:${this.auditModule}` : this.variantPreviewLevel >= 40 ? `VAR:L${this.level} SET${this.level >= 60 ? 3 : this.level >= 50 ? 2 : 1}/3 COUNT${this.enemies.filter((enemy) => enemy.highVariant).length}/7` : this.balancePreviewLevel >= 30 ? `BAL:L${this.level} T${this.getHighLevelRewardTier()} CAP${this.getHighLevelSpawnProfile().enemyCap} B${this.getHighLevelSpawnProfile().batch} I${this.getHighLevelSpawnProfile().interval.toFixed(2)} XPx${this.getExperienceRewardMultiplier().toFixed(2)} NEED${this.xpNeeded} R${(this.getRecoveryDropChance() * 100).toFixed(1)}% M${(this.getMagnetDropChance() * 100).toFixed(1)}%` : "DBG"} IN:${this.enemies.filter((enemy) => this.isInsideContainment(enemy)).length} OUT:${this.enemies.filter((enemy) => !this.isInsideContainment(enemy)).length} VAR:${this.enemies.filter((enemy) => enemy.highVariant).length} FIRE:${this.debugProjectilesFired} COL:${this.debugProjectileCollisions} HIT:${this.debugHits} KILL:${this.debugKills} ENTRY:${this.debugEntries} CRYO:${this.enemies.filter((enemy) => enemy.cryoTime > 0).length} COR:${this.enemies.filter((enemy) => enemy.corrosionTime > 0).length} DMG:${this.lastDamageSource}` : undefined,
+      debugStatus: this.debugMode ? `${this.auditModule ? `AUDIT:${this.auditModule}` : this.variantPreviewLevel >= 40 ? `VAR:L${this.level} SET${this.level >= 60 ? 3 : this.level >= 50 ? 2 : 1}/3 COUNT${this.enemies.filter((enemy) => enemy.highVariant).length}/7` : this.balancePreviewLevel >= 30 ? `BAL:L${this.level} T${this.getHighLevelRewardTier()} CAP${this.getHighLevelSpawnProfile().enemyCap} B${this.getHighLevelSpawnProfile().batch} I${this.getHighLevelSpawnProfile().interval.toFixed(2)} XPx${this.getExperienceRewardMultiplier().toFixed(2)} NEED${this.xpNeeded} R${(this.getRecoveryDropChance() * 100).toFixed(1)}% M${(this.getMagnetDropChance() * 100).toFixed(1)}%` : "DBG"} IN:${this.enemies.filter((enemy) => this.isInsideContainment(enemy)).length} OUT:${this.enemies.filter((enemy) => !this.isInsideContainment(enemy)).length} VAR:${this.enemies.filter((enemy) => enemy.highVariant).length} FIRE:${this.debugProjectilesFired} COL:${this.debugProjectileCollisions} HIT:${this.debugHits} KILL:${this.debugKills} ENTRY:${this.debugEntries} CRYO:${this.enemies.filter((enemy) => enemy.cryoTime > 0).length} COR:${this.enemies.filter((enemy) => enemy.corrosionTime > 0).length} DMG:${this.lastDamageSource}${debugResourceSuffix}` : undefined,
+      debugMetrics,
       attacks,
       totalDamage,
       resultStats,
