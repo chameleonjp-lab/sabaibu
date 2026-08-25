@@ -16,6 +16,13 @@ export const PLAYER_RING_CONTACT_DAMAGE = 2;
 /** Shared cap for every maximum-health increase, including Endless boss rewards. */
 export const PLAYER_MAX_HEALTH_CAP = 200;
 
+/** Long-run counters shared by the game, score calculation, and server contract. */
+export const MAX_TRACKED_KILLS = 100_000;
+export const MAX_TRACKED_SECONDS = 86_400;
+export const MAX_PLAYER_LEVEL = 200;
+export const MAX_TRACKED_DAMAGE_HITS = 100_000;
+export const MAX_TRACKED_DAMAGE_TAKEN = 100_000_000;
+
 /** Simulation timing limits used to keep throttled tabs from fast-forwarding or stalling indefinitely. */
 export const SIMULATION_DEBT_CAP_SECONDS = 5;
 export const SIMULATION_FRAME_BUDGET_SECONDS = 1;
@@ -102,8 +109,8 @@ const safeInteger = (value: number, maximum = Number.MAX_SAFE_INTEGER) => (
 
 /** Return every 100-kill boundary crossed by the latest simulation update. */
 export function getCrossedKillMilestones(previousKills: number, currentKills: number): number[] {
-  const previous = safeInteger(previousKills, 100_000);
-  const current = safeInteger(currentKills, 100_000);
+  const previous = safeInteger(previousKills, MAX_TRACKED_KILLS);
+  const current = safeInteger(currentKills, MAX_TRACKED_KILLS);
   if (current <= previous) return [];
 
   const milestones: number[] = [];
@@ -117,11 +124,11 @@ export function getCrossedKillMilestones(previousKills: number, currentKills: nu
 
 /** Calculate all positive and negative score components without hidden bonuses. */
 export function calculateScoreBreakdown(input: ScoreInput): ScoreBreakdown {
-  const kills = safeInteger(input.kills, 100_000);
-  const seconds = safeInteger(input.seconds, 86_400);
-  const level = Math.max(1, safeInteger(input.level, 200));
-  const damageHits = safeInteger(input.damageHits, 100_000);
-  const damageTaken = safeInteger(input.damageTaken, 100_000_000);
+  const kills = safeInteger(input.kills, MAX_TRACKED_KILLS);
+  const seconds = safeInteger(input.seconds, MAX_TRACKED_SECONDS);
+  const level = Math.max(1, safeInteger(input.level, MAX_PLAYER_LEVEL));
+  const damageHits = safeInteger(input.damageHits, MAX_TRACKED_DAMAGE_HITS);
+  const damageTaken = safeInteger(input.damageTaken, MAX_TRACKED_DAMAGE_TAKEN);
   const killPoints = kills * SCORE_RULES.killPoints;
   const timePoints = input.mode === "normal"
     ? input.outcome === "clear"
