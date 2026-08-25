@@ -18,6 +18,7 @@ import {
   NORMAL_SENTINEL_OVERFLOW_HEAL,
   NORMAL_TARGET_SECONDS,
   PLAYER_RING_CONTACT_DAMAGE,
+  PLAYER_MAX_HEALTH_CAP,
   SCORE_RULES,
   UTILITY_SLOT_LIMIT,
   calculateScoreBreakdown,
@@ -41,6 +42,7 @@ describe("normal-mode rules", () => {
     expect(NORMAL_SENTINEL_MAX_LEVEL).toBe(7);
     expect(NORMAL_SENTINEL_OVERFLOW_HEAL).toBe(30);
     expect(PLAYER_RING_CONTACT_DAMAGE).toBe(2);
+    expect(PLAYER_MAX_HEALTH_CAP).toBe(200);
     expect(getDueNormalBossStage(179.999, new Set())).toBeUndefined();
     expect(getDueNormalBossStage(180, new Set())).toBe(1);
     expect(getDueNormalBossStage(360, new Set([1]))).toBe(2);
