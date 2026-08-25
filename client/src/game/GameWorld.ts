@@ -536,6 +536,9 @@ export class GameWorld {
     this.updateCorrosion(safeDelta);
     if (this.phase !== "playing" || this.runFinalized) return;
     this.updateEnemies(safeDelta);
+    // Enemy defeats can create several drops in one frame. Enforce the same
+    // bound after the producer runs so snapshots never expose an unbounded burst.
+    this.enforceTransientCaps();
     if (this.phase !== "playing") return;
     this.updateMagnetItems(safeDelta);
     this.updateGems(safeDelta);
