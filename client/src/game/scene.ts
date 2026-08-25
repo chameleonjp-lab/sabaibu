@@ -18,7 +18,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { GAME_ASSETS } from "./assets";
 import { ARENA_OBSTACLES } from "./arena";
 import { GameWorld } from "./GameWorld";
-import { splitSimulationDelta } from "./rules";
+import { consumeSimulationDebt, splitSimulationDelta } from "./rules";
 import type { BossRewardId, GameMode, GameSnapshot, ModuleId, UpgradeId } from "./types";
 
 export interface GameHandle {
@@ -181,12 +181,35 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
 
   const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview, options.levelPreview, options.balancePreviewLevel, options.variantPreviewLevel, options.milestoneBossPreviewLevel, options.milestoneRewardPreviewLevel, options.obstaclePreview, options.resultPreview, options.mode);
   let simulationDebt = 0;
+  let discardNextFrameDelta = false;
+  const clearSimulationDebt = () => {
+    simulationDebt = 0;
+  };
+  const resetSimulationAfterLifecycle = () => {
+    simulationDebt = 0;
+    discardNextFrameDelta = true;
+  };
+  const handleVisibilityChange = () => {
+    resetSimulationAfterLifecycle();
+  };
+  const handlePageHide = () => {
+    resetSimulationAfterLifecycle();
+  };
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", handleVisibilityChange);
+  if (typeof window !== "undefined") window.addEventListener("pagehide", handlePageHide);
+
   scene.onBeforeRenderObservable.add(() => {
-    const frameDelta = Math.max(0, scene.getEngine().getDeltaTime() / 1000);
-    simulationDebt = Math.min(5, simulationDebt + frameDelta);
-    const simulationBudget = Math.min(simulationDebt, 0.6);
-    for (const step of splitSimulationDelta(simulationBudget)) world.update(step);
-    simulationDebt = Math.max(0, simulationDebt - simulationBudget);
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      clearSimulationDebt();
+      return;
+    }
+    const rawFrameDelta = scene.getEngine().getDeltaTime() / 1000;
+    const frameDelta = Number.isFinite(rawFrameDelta) ? Math.max(0, rawFrameDelta) : 0;
+    const effectiveFrameDelta = discardNextFrameDelta ? 0 : frameDelta;
+    discardNextFrameDelta = false;
+    const timing = consumeSimulationDebt(simulationDebt, effectiveFrameDelta);
+    for (const step of splitSimulationDelta(timing.budget)) world.update(step);
+    simulationDebt = timing.remainingDebt;
 
     const forward = camera.target.subtract(camera.position);
     forward.y = 0;
@@ -214,7 +237,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
       cameraZoomMultiplier = Math.max(0.82, Math.min(1.22, multiplier));
     },
     setPaused: (paused) => {
-      if (paused) simulationDebt = 0;
+      if (paused) clearSimulationDebt();
       world.setPaused(paused);
     },
     retire: () => world.retire(),
@@ -223,10 +246,12 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     chooseUpgrade: (id) => world.chooseUpgrade(id),
     rerollUpgrades: () => world.rerollUpgradeChoices(),
     restart: () => {
-      simulationDebt = 0;
+      clearSimulationDebt();
       world.restart();
     },
     dispose: () => {
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (typeof window !== "undefined") window.removeEventListener("pagehide", handlePageHide);
       world.dispose();
       camera.detachControl();
       scene.dispose();
