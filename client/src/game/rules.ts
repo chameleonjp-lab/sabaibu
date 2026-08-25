@@ -1,4 +1,4 @@
-import type { EvolutionId, GameMode, GameOutcome, ModuleId, ScoreBreakdown } from "./types";
+import type { EvolutionId, GameMode, GameOutcome, ModuleId, ScoreBreakdown, SoundEvent } from "./types";
 
 /** The normal run's fixed objective and scheduled boss encounters. */
 export const NORMAL_TARGET_SECONDS = 600;
@@ -37,6 +37,8 @@ export const SIMULATION_FRAME_BUDGET_SECONDS = 1;
 export const KILL_MILESTONE_INTERVAL = 100;
 /** Keep a large kill jump from mounting unbounded five-second DOM overlays. */
 export const MAX_ACTIVE_MILESTONE_CELEBRATIONS = 8;
+/** A delayed tab must not replay a large historical sound burst on one render. */
+export const MAX_SOUND_EVENTS_PER_FLUSH = 4;
 
 /** Hard encounter-density limits used by normal mode. The boss may coexist with 56 regular enemies. */
 export const NORMAL_MAX_ENEMIES = 57;
@@ -139,6 +141,52 @@ export function getCrossedKillMilestones(previousKills: number, currentKills: nu
 /** Retain only the newest five-second milestone overlays after a state update. */
 export function retainLatestMilestoneCelebrations<T>(current: readonly T[], additions: readonly T[]): T[] {
   return [...current, ...additions].slice(-MAX_ACTIVE_MILESTONE_CELEBRATIONS);
+}
+
+const PRIORITY_SOUND_CUES = new Set<string>([
+  "boss",
+  "level-up",
+  "perfect",
+  "dodge",
+  "low-health",
+  "choice",
+]);
+const TERMINAL_SOUND_CUES = new Set<string>(["clear", "gameover"]);
+
+export interface SoundPlaybackSelection {
+  events: SoundEvent[];
+  nextEventId: number;
+}
+
+/**
+ * Select a small, recent sound batch and advance past stale backlog.
+ * Terminal cues are retained so a delayed result still announces its outcome.
+ */
+export function selectSoundEventsForPlayback(
+  events: readonly SoundEvent[],
+  lastPlayedEventId: number,
+  maximumEvents = MAX_SOUND_EVENTS_PER_FLUSH,
+): SoundPlaybackSelection {
+  const normalizedLastEventId = Number.isFinite(lastPlayedEventId) ? Math.max(0, Math.trunc(lastPlayedEventId)) : 0;
+  const limit = Number.isFinite(maximumEvents) ? Math.max(1, Math.trunc(maximumEvents)) : MAX_SOUND_EVENTS_PER_FLUSH;
+  const pending = events
+    .filter((event) => Number.isFinite(event.id) && event.id > normalizedLastEventId)
+    .sort((left, right) => left.id - right.id);
+  if (pending.length === 0) return { events: [], nextEventId: normalizedLastEventId };
+  const nextEventId = pending[pending.length - 1].id;
+  if (pending.length <= limit) return { events: pending, nextEventId };
+
+  const terminal = pending.filter((event) => TERMINAL_SOUND_CUES.has(event.cue)).slice(-limit);
+  const terminalIds = new Set(terminal.map((event) => event.id));
+  const priority = pending
+    .filter((event) => !terminalIds.has(event.id) && PRIORITY_SOUND_CUES.has(event.cue))
+    .slice(-Math.max(0, limit - terminal.length));
+  const reservedIds = new Set([...terminal, ...priority].map((event) => event.id));
+  const recent = pending
+    .filter((event) => !reservedIds.has(event.id))
+    .slice(-Math.max(0, limit - reservedIds.size));
+  const selected = [...recent, ...priority, ...terminal].sort((left, right) => left.id - right.id);
+  return { events: selected, nextEventId };
 }
 
 /** Calculate all positive and negative score components without hidden bonuses. */

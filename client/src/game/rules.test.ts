@@ -11,6 +11,7 @@ import {
   EVOLUTION_RECIPES,
   KILL_MILESTONE_INTERVAL,
   MAX_ACTIVE_MILESTONE_CELEBRATIONS,
+  MAX_SOUND_EVENTS_PER_FLUSH,
   MAX_PLAYER_LEVEL,
   MAX_TRACKED_BOSSES_DEFEATED,
   MAX_TRACKED_COMBAT_DAMAGE,
@@ -48,6 +49,7 @@ import {
   isNormalTargetReached,
   isObjectiveComplete,
   isRankableOutcome,
+  selectSoundEventsForPlayback,
   splitSimulationDelta,
   consumeSimulationDebt,
 } from "./rules";
@@ -178,6 +180,16 @@ describe("Endless long-run caps", () => {
     expect(MAX_TRACKED_COMBAT_DAMAGE).toBe(1_000_000_000);
     expect(MAX_ACTIVE_MILESTONE_CELEBRATIONS).toBe(8);
     expect(retainLatestMilestoneCelebrations([1, 2, 3], [4, 5, 6, 7, 8, 9, 10])).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(MAX_SOUND_EVENTS_PER_FLUSH).toBe(4);
+
+    const soundBacklog = [
+      { id: 1, cue: "gameover" as const },
+      ...Array.from({ length: 9 }, (_, index) => ({ id: index + 2, cue: "attack" as const })),
+    ];
+    const selectedSound = selectSoundEventsForPlayback(soundBacklog, 0);
+    expect(selectedSound.events.map(({ id }) => id)).toEqual([1, 8, 9, 10]);
+    expect(selectedSound.nextEventId).toBe(10);
+    expect(selectSoundEventsForPlayback(soundBacklog, 10)).toEqual({ events: [], nextEventId: 10 });
 
     expect(getCrossedKillMilestones(MAX_TRACKED_KILLS - 1, MAX_TRACKED_KILLS + 1)).toEqual([MAX_TRACKED_KILLS]);
     expect(getCrossedKillMilestones(MAX_TRACKED_KILLS, MAX_TRACKED_KILLS + 1)).toEqual([]);
