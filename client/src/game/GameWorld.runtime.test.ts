@@ -296,6 +296,7 @@ describe("GameWorld normal mission lifecycle", () => {
 
 type EndlessRuntime = {
   phase: GameSnapshot["phase"];
+  elapsed: number;
   level: number;
   health: number;
   maxHealth: number;
@@ -317,6 +318,9 @@ type EndlessRuntime = {
   getBossRewardOptions: () => Array<{ id: string; enabled: boolean }>;
   updateHighVariantAction: (enemy: unknown, canThreatenPlayer: boolean, delta: number) => number;
   setupHighVariantPreview: (level: number) => void;
+  spawnTimer: number;
+  xp: number;
+  xpNeeded: number;
   moduleTiers: Record<string, number>;
   deployDecoy: () => void;
   isEnemyDodgeThreatened: (enemy: unknown, origin: Vector3) => boolean;
@@ -382,6 +386,43 @@ describe("GameWorld Endless milestone lifecycle", () => {
     world.chooseBossReward("fortify");
     expect(runtime.maxHealth).toBe(PLAYER_MAX_HEALTH_CAP);
     expect(runtime.health).toBe(PLAYER_MAX_HEALTH_CAP);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+});
+
+describe("GameWorld Endless long-run timing", () => {
+  it("keeps 10, 30, and 60 minutes of Endless simulation time alive", () => {
+    stubWindow();
+    const { engine, scene, world, runtime } = createEndlessWorld();
+
+    // Isolate the clock and phase transition from random combat so this
+    // deterministic stress test remains stable in CI.
+    runtime.enemies.length = 0;
+    runtime.spawnTimer = Number.POSITIVE_INFINITY;
+    runtime.xp = 0;
+    runtime.xpNeeded = Number.MAX_SAFE_INTEGER;
+    runtime.health = Number.MAX_SAFE_INTEGER;
+    runtime.maxHealth = Number.MAX_SAFE_INTEGER;
+
+    const checkpoints = new Map<number, number>([
+      [12_000, 600],
+      [36_000, 1_800],
+      [72_000, 3_600],
+    ]);
+    for (let step = 1; step <= 72_000; step += 1) {
+      world.update(0.05);
+      const expectedSeconds = checkpoints.get(step);
+      if (expectedSeconds !== undefined) {
+        expect(runtime.phase).toBe("playing");
+        expect(runtime.elapsed).toBeCloseTo(expectedSeconds, 6);
+      }
+    }
+
+    expect(runtime.elapsed).toBeCloseTo(3_600, 6);
+    expect(runtime.phase).toBe("playing");
 
     world.dispose();
     scene.dispose();
