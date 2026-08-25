@@ -17,7 +17,10 @@ import {
   MAX_TRACKED_SECONDS,
   NORMAL_BOSS_TIMINGS,
   NORMAL_FINAL_BOSS_HP_MULTIPLIER,
+  ENDLESS_MAX_ENEMIES,
+  ENDLESS_MAX_REGULAR_ENEMIES,
   NORMAL_MAX_ENEMIES,
+  NORMAL_MAX_REGULAR_ENEMIES,
   NORMAL_MAX_ENEMIES_PER_SECOND,
   NORMAL_SENTINEL_MAX_LEVEL,
   NORMAL_SENTINEL_OVERFLOW_HEAL,
@@ -63,6 +66,9 @@ describe("normal-mode rules", () => {
 
   it("allows the scheduled boss to coexist with the regular enemy cap", () => {
     expect(NORMAL_MAX_ENEMIES).toBe(57);
+    expect(NORMAL_MAX_REGULAR_ENEMIES).toBe(56);
+    expect(ENDLESS_MAX_REGULAR_ENEMIES).toBe(94);
+    expect(ENDLESS_MAX_ENEMIES).toBe(95);
     expect(NORMAL_MAX_ENEMIES_PER_SECOND).toBe(4);
     expect(ATTACK_SLOT_LIMIT).toBe(6);
     expect(UTILITY_SLOT_LIMIT).toBe(4);

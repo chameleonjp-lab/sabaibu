@@ -4,7 +4,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { GameWorld } from "./GameWorld";
 import type { GameSnapshot } from "./types";
-import { PLAYER_MAX_HEALTH_CAP } from "./rules";
+import { ENDLESS_MAX_ENEMIES, PLAYER_MAX_HEALTH_CAP } from "./rules";
 
 type RuntimeEnemy = { hp: number; missionBossStage?: 1 | 2 | 3 };
 type RuntimeWorld = {
@@ -328,12 +328,13 @@ type EndlessRuntime = {
   dodgeCooldown: number;
   dodgeInvulnerable: number;
   damagePlayer: (amount: number, cooldown: number, source: "contact") => string;
+  ensureMilestoneBossForCurrentLevel: () => void;
 };
 
-const createEndlessWorld = (onSnapshot: (snapshot: GameSnapshot) => void = () => undefined) => {
+const createEndlessWorld = (onSnapshot: (snapshot: GameSnapshot) => void = () => undefined, debugMode = false) => {
   const engine = new NullEngine({ renderWidth: 390, renderHeight: 844, textureSize: 256 });
   const scene = new Scene(engine);
-  const world = new GameWorld(scene, onSnapshot, false, false, false, false, false, false, false, false, false, undefined, false, 0, 0, 0, 0, 0, 0, false, false, "endless");
+  const world = new GameWorld(scene, onSnapshot, false, false, false, false, false, false, false, false, false, undefined, debugMode, 0, 0, 0, 0, 0, 0, false, false, "endless");
   return { engine, scene, world, runtime: world as unknown as EndlessRuntime };
 };
 
@@ -386,6 +387,52 @@ describe("GameWorld Endless milestone lifecycle", () => {
     world.chooseBossReward("fortify");
     expect(runtime.maxHealth).toBe(PLAYER_MAX_HEALTH_CAP);
     expect(runtime.health).toBe(PLAYER_MAX_HEALTH_CAP);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+});
+
+describe("GameWorld Endless enemy density", () => {
+  it("keeps the periodic boss inside the long-run total enemy cap", () => {
+    stubWindow();
+    const { engine, scene, world, runtime } = createEndlessWorld();
+
+    runtime.level = 60;
+    runtime.elapsed = 3_600;
+    runtime.spawnTimer = 0;
+    while (runtime.enemies.length < ENDLESS_MAX_ENEMIES - 1) {
+      runtime.updateSpawning(0);
+      runtime.spawnTimer = 0;
+    }
+
+    expect(runtime.enemies).toHaveLength(ENDLESS_MAX_ENEMIES - 1);
+    runtime.ensureMilestoneBossForCurrentLevel();
+    expect(runtime.enemies).toHaveLength(ENDLESS_MAX_ENEMIES);
+
+    runtime.updateSpawning(1);
+    expect(runtime.enemies).toHaveLength(ENDLESS_MAX_ENEMIES);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("reports mesh, transient-effect, drop, and sound counts in debug mode", () => {
+    stubWindow();
+    let latestSnapshot: GameSnapshot | undefined;
+    const { engine, scene, world } = createEndlessWorld((snapshot) => { latestSnapshot = snapshot; }, true);
+
+    expect(latestSnapshot?.debugMetrics?.sceneMeshes).toBeGreaterThan(0);
+    expect(latestSnapshot?.debugMetrics?.enemies).toBeGreaterThanOrEqual(0);
+    expect(latestSnapshot?.debugMetrics?.transientEffects).toBeGreaterThanOrEqual(0);
+    expect(latestSnapshot?.debugMetrics?.drops).toBeGreaterThanOrEqual(0);
+    expect(latestSnapshot?.debugMetrics?.soundEvents).toBeGreaterThanOrEqual(0);
+    expect(latestSnapshot?.debugStatus).toContain("MESH:");
+    expect(latestSnapshot?.debugStatus).toContain("FX:");
+    expect(latestSnapshot?.debugStatus).toContain("DROP:");
+    expect(latestSnapshot?.debugStatus).toContain("SND:");
 
     world.dispose();
     scene.dispose();
