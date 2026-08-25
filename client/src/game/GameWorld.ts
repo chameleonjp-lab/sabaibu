@@ -32,9 +32,13 @@ import {
   NORMAL_SENTINEL_OVERFLOW_HEAL,
   NORMAL_TARGET_SECONDS,
   MAX_PLAYER_LEVEL,
+  MAX_TRACKED_BOSSES_DEFEATED,
+  MAX_TRACKED_COMBAT_DAMAGE,
+  MAX_TRACKED_COMBO,
   MAX_TRACKED_DAMAGE_HITS,
   MAX_TRACKED_DAMAGE_TAKEN,
   MAX_TRACKED_KILLS,
+  MAX_TRACKED_PERFECT_DODGES,
   MAX_TRACKED_SECONDS,
   PLAYER_MAX_HEALTH_CAP,
   PLAYER_RING_CONTACT_DAMAGE,
@@ -1620,7 +1624,7 @@ export class GameWorld {
       });
       if (enemyIndex >= 0) {
         const enemy = this.enemies[enemyIndex];
-        if (this.debugMode) this.debugProjectileCollisions += 1;
+        if (this.debugMode) this.debugProjectileCollisions = Math.min(MAX_TRACKED_KILLS, this.debugProjectileCollisions + 1);
         this.applyDamage(enemy, projectile.damage, projectile.source);
         enemy.hitFlash = 0.12;
         projectile.mesh.dispose();
@@ -1671,7 +1675,7 @@ export class GameWorld {
     bolt.position.y = PROJECTILE_HEIGHT;
     bolt.material = this.projectileMaterial;
     this.projectiles.push({ mesh: bolt, velocity: direction.scale(speed), damage, life: 2.2, hitRadius: 0.76 + diameter, source });
-    if (this.debugMode) this.debugProjectilesFired += 1;
+    if (this.debugMode) this.debugProjectilesFired = Math.min(MAX_TRACKED_KILLS, this.debugProjectilesFired + 1);
     this.queueAttackSound();
   }
 
@@ -1684,8 +1688,9 @@ export class GameWorld {
 
   private recordDamage(source: AttackId, damage: number) {
     const stat = this.combatStats[source];
-    if (!stat || damage <= 0) return;
-    stat.damage += damage;
+    if (!stat || !Number.isFinite(damage) || damage <= 0) return;
+    const currentDamage = Number.isFinite(stat.damage) ? Math.max(0, stat.damage) : 0;
+    stat.damage = Math.min(MAX_TRACKED_COMBAT_DAMAGE, currentDamage + damage);
   }
 
   private getTargetingRadius() {
@@ -3154,13 +3159,13 @@ export class GameWorld {
     bolt.position.y = PROJECTILE_HEIGHT;
     bolt.material = this.projectileMaterial;
     this.projectiles.push({ mesh: bolt, velocity: direction.scale(speed), damage, life: 1.35, hitRadius: 0.76 + diameter, source });
-    if (this.debugMode) this.debugProjectilesFired += 1;
+    if (this.debugMode) this.debugProjectilesFired = Math.min(MAX_TRACKED_KILLS, this.debugProjectilesFired + 1);
     this.queueAttackSound();
   }
 
   private applyDamage(enemy: Enemy, damage: number, source: AttackId, skipCorrosion = false) {
-    if (!this.isSimulationActive() || enemy.hp <= 0 || !this.enemies.includes(enemy) || !this.isCombatTarget(enemy) || damage <= 0) return;
-    if (this.debugMode) this.debugHits += 1;
+    if (!this.isSimulationActive() || enemy.hp <= 0 || !this.enemies.includes(enemy) || !this.isCombatTarget(enemy) || !Number.isFinite(damage) || damage <= 0) return;
+    if (this.debugMode) this.debugHits = Math.min(MAX_TRACKED_KILLS, this.debugHits + 1);
     const boost = this.dodgeBoostSeconds > 0 ? 1.15 : 1;
     const vulnerability = enemy.vulnerableTime > 0 ? 1.35 : 1;
     const amplifiedDamage = damage * this.attackAmplifier * boost * vulnerability;
@@ -3173,9 +3178,9 @@ export class GameWorld {
       const bossHealthStepAfter = Math.min(10, Math.floor((1 - Math.max(0, enemy.hp) / Math.max(1, enemy.maxHp)) * 10));
       const crossedSteps = Math.max(0, bossHealthStepAfter - bossHealthStepBefore);
       if (crossedSteps > 0) {
-        this.combo += crossedSteps * 5;
+        this.combo = Math.min(MAX_TRACKED_COMBO, this.combo + crossedSteps * 5);
         this.comboTimer = COMBO_WINDOW_SECONDS;
-        this.maxCombo = Math.max(this.maxCombo, this.combo);
+        this.maxCombo = Math.min(MAX_TRACKED_COMBO, Math.max(this.maxCombo, this.combo));
       }
     }
     if (!skipCorrosion && this.moduleTiers.corrosion > 0) this.applyCorrosion(enemy);
@@ -3311,7 +3316,7 @@ export class GameWorld {
     this.constrainEnemyToArena(enemy);
     if (!this.isInsideContainment(enemy)) return;
     enemy.enteringContainment = false;
-    if (this.debugMode) this.debugEntries += 1;
+    if (this.debugMode) this.debugEntries = Math.min(MAX_TRACKED_KILLS, this.debugEntries + 1);
   }
 
   private removeDefeatedEnemies() {
@@ -3751,7 +3756,7 @@ export class GameWorld {
   private registerPerfectDodge(threatenedBoss?: Enemy) {
     if (this.dodgePerfectRegistered) return;
     this.dodgePerfectRegistered = true;
-    this.perfectDodges += 1;
+    this.perfectDodges = Math.min(MAX_TRACKED_PERFECT_DODGES, this.perfectDodges + 1);
     this.dodgeBoostSeconds = PERFECT_DODGE_BOOST_SECONDS;
     this.queueSound("perfect");
     if (threatenedBoss && this.enemies.includes(threatenedBoss)) {
@@ -3840,11 +3845,11 @@ export class GameWorld {
     enemy.mesh.dispose();
     this.kills = Math.min(MAX_TRACKED_KILLS, this.kills + 1);
     this.queueSound(enemy.kind === "bulwark" ? "kill-bulwark" : enemy.kind === "striker" ? "kill-striker" : "kill-scout");
-    this.combo += 1;
+    this.combo = Math.min(MAX_TRACKED_COMBO, this.combo + 1);
     this.comboTimer = COMBO_WINDOW_SECONDS;
-    this.maxCombo = Math.max(this.maxCombo, this.combo);
-    if (enemy.lastDamagedBy) this.combatStats[enemy.lastDamagedBy].kills += 1;
-    if (this.debugMode) this.debugKills += 1;
+    this.maxCombo = Math.min(MAX_TRACKED_COMBO, Math.max(this.maxCombo, this.combo));
+    if (enemy.lastDamagedBy) this.combatStats[enemy.lastDamagedBy].kills = Math.min(MAX_TRACKED_KILLS, this.combatStats[enemy.lastDamagedBy].kills + 1);
+    if (this.debugMode) this.debugKills = Math.min(MAX_TRACKED_KILLS, this.debugKills + 1);
     if (enemy.kind === "bulwark" && !milestoneBoss) {
       const blastRadius = BULWARK_DESTRUCTION_BLAST_RADIUS;
       const explosion = MeshBuilder.CreateTorus("bulwark-destruction-blast", { diameter: blastRadius * 2, thickness: 0.12, tessellation: 36 }, this.scene);
@@ -3875,7 +3880,7 @@ export class GameWorld {
       if (shouldDropMagnet) this.createMagnetItem(this.getRecoverableDropPosition(dropPosition.add(new Vector3(0.5, 0, -0.5))));
     }
     if (milestoneBoss) {
-      this.bossesDefeated += 1;
+      this.bossesDefeated = Math.min(MAX_TRACKED_BOSSES_DEFEATED, this.bossesDefeated + 1);
       this.activeMissionBossStage = 0;
       if (this.mode === "normal" && missionBossStage === 3) {
         this.finishRun("clear", `最終ボス「${NORMAL_BOSS_LABELS[3]}」を撃破`);
