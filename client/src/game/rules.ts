@@ -16,6 +16,10 @@ export const PLAYER_RING_CONTACT_DAMAGE = 2;
 /** Shared cap for every maximum-health increase, including Endless boss rewards. */
 export const PLAYER_MAX_HEALTH_CAP = 200;
 
+/** Simulation timing limits used to keep throttled tabs from fast-forwarding or stalling indefinitely. */
+export const SIMULATION_DEBT_CAP_SECONDS = 5;
+export const SIMULATION_FRAME_BUDGET_SECONDS = 1;
+
 /** Celebrate every 100 confirmed defeats. */
 export const KILL_MILESTONE_INTERVAL = 100;
 
@@ -201,6 +205,15 @@ export function splitSimulationDelta(delta: number, maximumStep = 0.05): number[
     remaining -= step;
   }
   return steps;
+}
+
+/** Add one render interval to the simulation debt and consume a bounded amount. */
+export function consumeSimulationDebt(currentDebt: number, frameDelta: number) {
+  const safeDebt = Number.isFinite(currentDebt) ? Math.max(0, currentDebt) : 0;
+  const safeFrameDelta = Number.isFinite(frameDelta) ? Math.max(0, frameDelta) : 0;
+  const debt = Math.min(SIMULATION_DEBT_CAP_SECONDS, safeDebt + safeFrameDelta);
+  const budget = Math.min(debt, SIMULATION_FRAME_BUDGET_SECONDS);
+  return { budget, remainingDebt: Math.max(0, debt - budget) };
 }
 
 /** Find a recipe by id without mutating the shared recipe table. */
