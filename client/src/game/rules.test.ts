@@ -10,6 +10,11 @@ import {
   DODGE_PERFECT_WINDOW_SECONDS,
   EVOLUTION_RECIPES,
   KILL_MILESTONE_INTERVAL,
+  MAX_PLAYER_LEVEL,
+  MAX_TRACKED_DAMAGE_HITS,
+  MAX_TRACKED_DAMAGE_TAKEN,
+  MAX_TRACKED_KILLS,
+  MAX_TRACKED_SECONDS,
   NORMAL_BOSS_TIMINGS,
   NORMAL_FINAL_BOSS_HP_MULTIPLIER,
   NORMAL_MAX_ENEMIES,
@@ -138,5 +143,39 @@ describe("normal-mode rules", () => {
     expect(recipe.modules).toEqual(["vector", "laser"]);
     expect(canEvolve(["vector", "laser"], recipe)).toBe(true);
     expect(canEvolve(["vector"], recipe)).toBe(false);
+  });
+});
+
+
+describe("Endless long-run caps", () => {
+  it("uses one cap contract for score, level, damage, and milestone tracking", () => {
+    expect(MAX_TRACKED_KILLS).toBe(100_000);
+    expect(MAX_TRACKED_SECONDS).toBe(86_400);
+    expect(MAX_PLAYER_LEVEL).toBe(200);
+    expect(MAX_TRACKED_DAMAGE_HITS).toBe(100_000);
+    expect(MAX_TRACKED_DAMAGE_TAKEN).toBe(100_000_000);
+
+    expect(getCrossedKillMilestones(MAX_TRACKED_KILLS - 1, MAX_TRACKED_KILLS + 1)).toEqual([MAX_TRACKED_KILLS]);
+    expect(getCrossedKillMilestones(MAX_TRACKED_KILLS, MAX_TRACKED_KILLS + 1)).toEqual([]);
+
+    const capped = calculateScoreBreakdown({
+      mode: "endless",
+      outcome: "failed",
+      kills: MAX_TRACKED_KILLS + 5,
+      seconds: MAX_TRACKED_SECONDS + 5,
+      level: MAX_PLAYER_LEVEL + 5,
+      damageHits: MAX_TRACKED_DAMAGE_HITS + 5,
+      damageTaken: MAX_TRACKED_DAMAGE_TAKEN + 5,
+    });
+    const atCap = calculateScoreBreakdown({
+      mode: "endless",
+      outcome: "failed",
+      kills: MAX_TRACKED_KILLS,
+      seconds: MAX_TRACKED_SECONDS,
+      level: MAX_PLAYER_LEVEL,
+      damageHits: MAX_TRACKED_DAMAGE_HITS,
+      damageTaken: MAX_TRACKED_DAMAGE_TAKEN,
+    });
+    expect(capped).toEqual(atCap);
   });
 });
