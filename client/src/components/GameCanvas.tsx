@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { createGameScene, type GameHandle } from "@/game/scene";
 import { GAME_ASSETS } from "@/game/assets";
@@ -182,6 +183,8 @@ export default function GameCanvas() {
   const mainRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const weaponLibraryCloseRef = useRef<HTMLButtonElement>(null);
+  const weaponDetailCloseRef = useRef<HTMLButtonElement>(null);
   const startedRef = useRef(false);
   const handleRef = useRef<GameHandle | null>(null);
   const joystickPointerIdRef = useRef<number | null>(null);
@@ -946,10 +949,20 @@ export default function GameCanvas() {
   const closeWeaponLibrary = useCallback(() => {
     setWeaponDetailId(null);
     setWeaponLibraryOpen(false);
-  }, []);
+    restoreFocus();
+  }, [restoreFocus]);
 
   useEffect(() => {
     if (!weaponLibraryOpen) return;
+    const shell = mainRef.current;
+    const previousOverflow = shell?.style.overflow ?? "";
+    if (shell) shell.style.overflow = "hidden";
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      const closeButton = weaponDetailId === null ? weaponLibraryCloseRef.current : weaponDetailCloseRef.current;
+      closeButton?.focus();
+    });
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -957,7 +970,11 @@ export default function GameCanvas() {
       else closeWeaponLibrary();
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", onKeyDown);
+      if (shell) shell.style.overflow = previousOverflow;
+    };
   }, [closeWeaponLibrary, weaponDetailId, weaponLibraryOpen]);
 
   const renderSettingsFields = (startScreen = false) => (
@@ -969,6 +986,28 @@ export default function GameCanvas() {
       <button className="settings-reset" data-testid="reset-settings" type="button" onClick={() => { updatePlayerSettings(DEFAULT_PLAYER_SETTINGS); audio.setEnabled(true); }}>初期設定に戻す</button>
     </div>
   );
+
+  const weaponLibraryModal = weaponLibraryOpen ? createPortal(
+    <div className="weapon-library-layer" data-testid="weapon-library" onClick={(event) => { if (event.target === event.currentTarget) closeWeaponLibrary(); }}>
+      <section className="weapon-library-panel" role="dialog" aria-modal="true" aria-labelledby="weapon-library-title" data-dialog-root="true" onClick={(event) => event.stopPropagation()}>
+        <header className="weapon-library-header"><div><p className="modal-eyebrow">装備データベース // 出撃前確認</p><h2 id="weapon-library-title">武器一覧</h2></div><button ref={weaponLibraryCloseRef} type="button" className="weapon-library-close" aria-label="武器一覧を閉じる" onClick={closeWeaponLibrary}>×</button></header>
+        <p className="weapon-library-intro">名前だけでなく、攻撃の向き・範囲・役割まで確認できます。カードを選ぶと、レベルごとの変化と進化条件を表示します。</p>
+        <div className="weapon-library-grid">
+          {WEAPON_LIBRARY.map((weapon) => <button key={weapon.id} className="weapon-library-card" type="button" onClick={() => setWeaponDetailId(weapon.id)}><ModuleIcon id={weapon.iconId} className="weapon-library-icon" /><span className="weapon-library-category">{weapon.category}</span><strong>{weapon.title}</strong><small>{weapon.role}</small><p>{weapon.description}</p><i>詳細を見る</i></button>)}
+        </div>
+      </section>
+      {selectedWeapon && <div className="weapon-detail-layer" data-testid="weapon-detail" onClick={(event) => { if (event.target === event.currentTarget) setWeaponDetailId(null); }}>
+        <article className="weapon-detail-panel" role="dialog" aria-modal="true" aria-labelledby="weapon-detail-title" onClick={(event) => event.stopPropagation()}>
+          <header className="weapon-detail-header"><div><p className="modal-eyebrow">{selectedWeapon.code} // {selectedWeapon.category}</p><h2 id="weapon-detail-title"><ModuleIcon id={selectedWeapon.iconId} className="weapon-detail-icon" />{selectedWeapon.title}</h2></div><button ref={weaponDetailCloseRef} type="button" className="weapon-library-close" aria-label="武器の詳細を閉じる" onClick={() => setWeaponDetailId(null)}>×</button></header>
+          <div className="weapon-detail-lead"><strong>{selectedWeapon.role}</strong><p>{selectedWeapon.description}</p></div>
+          <section className="weapon-level-section" aria-labelledby="weapon-level-title"><header><h3 id="weapon-level-title">レベルごとの変化</h3><span>{selectedWeapon.maxLevelText}</span></header><ol>{selectedWeapon.levelDetails.map((detail, index) => <li key={`${selectedWeapon.id}-level-${index}`}><b>Lv.{index + 1}</b><span>{detail.replace(/^レベル\d+：/, "")}</span></li>)}</ol></section>
+          {selectedWeapon.synergy && <section className="weapon-synergy-section"><h3>組み合わせと進化</h3><p>{selectedWeapon.synergy}</p></section>}
+          <p className="weapon-availability">{selectedWeapon.availability}</p>
+        </article>
+      </div>}
+    </div>,
+    document.body,
+  ) : null;
 
   if (!runStarted) {
     return (
@@ -985,29 +1024,12 @@ export default function GameCanvas() {
             <fieldset className="mode-picker"><legend>モードを選択</legend><div role="radiogroup" aria-label="ゲームモード"><button data-testid="mode-normal" type="button" role="radio" aria-checked={selectedMode === "normal"} className={selectedMode === "normal" ? "selected" : ""} onClick={() => setSelectedMode("normal")}><b>通常</b><small>10分以内に最終ボスを撃破。</small></button><button data-testid="mode-endless" type="button" role="radio" aria-checked={selectedMode === "endless"} className={selectedMode === "endless" ? "selected" : ""} onClick={() => setSelectedMode("endless")}><b>無限</b><small>終わりなき波。得点を伸ばす。</small></button></div></fieldset>
             <button className="start-run-button" data-testid="start-run" type="submit">出撃開始 <span>開始</span></button>
           </form>
-          <button className="weapon-library-trigger" data-testid="weapon-list" type="button" onClick={() => { setWeaponDetailId(null); setWeaponLibraryOpen(true); }}><span>武器一覧</span><small>効果・レベル・進化条件を見る</small><b>開く</b></button>
+          <button className="weapon-library-trigger" data-testid="weapon-list" type="button" onClick={() => { rememberFocus(); setWeaponDetailId(null); setWeaponLibraryOpen(true); }}><span>武器一覧</span><small>効果・レベル・進化条件を見る</small><b>開く</b></button>
           <ShareButton className="home-share-action" label="ゲームをシェア" testId="share-home" title="サバサバ" text="【サバサバ】自動射撃で敵の波を切り抜ける、見下ろし型サバイバルゲーム。" />
           <details className="pre-run-settings" open><summary>出撃前の設定</summary><p>端末に保存されます。出撃中は一時停止画面から変更できます。</p>{renderSettingsFields(true)}</details>
           {sceneError && <p className="scene-error" role="alert">{sceneError}</p>}
         </section>
-        {weaponLibraryOpen && <div className="weapon-library-layer" data-testid="weapon-library" onPointerDown={(event) => { if (event.target === event.currentTarget) closeWeaponLibrary(); }}>
-          <section className="weapon-library-panel" role="dialog" aria-modal="true" aria-labelledby="weapon-library-title" data-dialog-root="true" onPointerDown={(event) => event.stopPropagation()}>
-            <header className="weapon-library-header"><div><p className="modal-eyebrow">装備データベース // 出撃前確認</p><h2 id="weapon-library-title">武器一覧</h2></div><button type="button" className="weapon-library-close" aria-label="武器一覧を閉じる" onClick={closeWeaponLibrary}>×</button></header>
-            <p className="weapon-library-intro">名前だけでなく、攻撃の向き・範囲・役割まで確認できます。カードを選ぶと、レベルごとの変化と進化条件を表示します。</p>
-            <div className="weapon-library-grid">
-              {WEAPON_LIBRARY.map((weapon) => <button key={weapon.id} className="weapon-library-card" type="button" onClick={() => setWeaponDetailId(weapon.id)}><ModuleIcon id={weapon.iconId} className="weapon-library-icon" /><span className="weapon-library-category">{weapon.category}</span><strong>{weapon.title}</strong><small>{weapon.role}</small><p>{weapon.description}</p><i>詳細を見る</i></button>)}
-            </div>
-          </section>
-          {selectedWeapon && <div className="weapon-detail-layer" data-testid="weapon-detail" onPointerDown={() => setWeaponDetailId(null)}>
-            <article className="weapon-detail-panel" role="dialog" aria-modal="true" aria-labelledby="weapon-detail-title" onPointerDown={(event) => event.stopPropagation()}>
-              <header className="weapon-detail-header"><div><p className="modal-eyebrow">{selectedWeapon.code} // {selectedWeapon.category}</p><h2 id="weapon-detail-title"><ModuleIcon id={selectedWeapon.iconId} className="weapon-detail-icon" />{selectedWeapon.title}</h2></div><button type="button" className="weapon-library-close" aria-label="武器の詳細を閉じる" onClick={() => setWeaponDetailId(null)}>×</button></header>
-              <div className="weapon-detail-lead"><strong>{selectedWeapon.role}</strong><p>{selectedWeapon.description}</p></div>
-              <section className="weapon-level-section" aria-labelledby="weapon-level-title"><header><h3 id="weapon-level-title">レベルごとの変化</h3><span>{selectedWeapon.maxLevelText}</span></header><ol>{selectedWeapon.levelDetails.map((detail, index) => <li key={`${selectedWeapon.id}-level-${index}`}><b>Lv.{index + 1}</b><span>{detail.replace(/^レベル\d+：/, "")}</span></li>)}</ol></section>
-              {selectedWeapon.synergy && <section className="weapon-synergy-section"><h3>組み合わせと進化</h3><p>{selectedWeapon.synergy}</p></section>}
-              <p className="weapon-availability">{selectedWeapon.availability}</p>
-            </article>
-          </div>}
-        </div>}
+        {weaponLibraryModal}
       </main>
     );
   }
