@@ -334,7 +334,7 @@ type EndlessRuntime = {
 const createEndlessWorld = (onSnapshot: (snapshot: GameSnapshot) => void = () => undefined, debugMode = false) => {
   const engine = new NullEngine({ renderWidth: 390, renderHeight: 844, textureSize: 256 });
   const scene = new Scene(engine);
-  const world = new GameWorld(scene, onSnapshot, false, false, false, false, false, false, false, false, false, undefined, false, 0, 0, 0, 0, 0, 0, false, false, "endless");
+  const world = new GameWorld(scene, onSnapshot, false, false, false, false, false, false, false, false, false, undefined, debugMode, 0, 0, 0, 0, 0, 0, false, false, "endless");
   return { engine, scene, world, runtime: world as unknown as EndlessRuntime };
 };
 
