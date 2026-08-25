@@ -207,7 +207,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     const frameDelta = Number.isFinite(rawFrameDelta) ? Math.max(0, rawFrameDelta) : 0;
     const effectiveFrameDelta = discardNextFrameDelta ? 0 : frameDelta;
     discardNextFrameDelta = false;
-    const timing = consumeSimulationDebt(simulationDebt, effectiveFrameDelta);
+    const timing = consumeSimulationDebt(simulationDebt, effectiveFrameDelta, world.isSimulationRunning());
     for (const step of splitSimulationDelta(timing.budget)) world.update(step);
     simulationDebt = timing.remainingDebt;
 
