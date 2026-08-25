@@ -120,16 +120,28 @@ const MILESTONE_BOSS_HP_MULTIPLIER = 20;
 const MILESTONE_BOSS_SCALE_MULTIPLIER = 2;
 const MODULE_MILESTONE_START_LEVEL = 30;
 const MODULE_MILESTONE_INTERVAL = 7;
+// These limits are deliberately above the normal steady-state counts. They are
+// emergency guards for long Endless runs or an unexpected timer/target regression.
 const MAX_GEM_MESHES = 100;
+const MAX_RECOVERY_ITEMS = 48;
+const MAX_MAGNET_ITEMS = 48;
 const MAX_SHOCKWAVES = 180;
 const MAX_ENERGY_TRACES = 120;
 const MAX_PROJECTILES = 120;
 const MAX_RICOCHET_SHOTS = 96;
+const MAX_GRAVITY_CORES = 24;
+const MAX_DECOYS = 24;
+const MAX_ARC_SHELLS = 96;
+const MAX_SPLIT_SHELLS = 96;
+const MAX_RETURN_BLADES = 48;
+const MAX_MINES = 24;
 const MAX_SKYFALL_STRIKES = 64;
 const MAX_NEEDLE_DROPS = 128;
 const MAX_IDLE_NEEDLES = 64;
 const MAX_HARPOONS = 32;
+const MAX_CLUSTER_CORES = 96;
 const MAX_CLUSTER_SHARDS = 128;
+const MAX_SOUND_EVENTS = 96;
 const PERFECT_DODGE_BOOST_SECONDS = 2.5;
 const VARIANT_TELEGRAPH_SECONDS = 0.62;
 const PROJECTILE_SOUND_MIN_INTERVAL = 0.18;
@@ -280,6 +292,11 @@ export class GameWorld {
   private damageTaken = 0;
   private soundEventSequence = 0;
   private soundEvents: SoundEvent[] = [];
+  private debugPeakSceneMeshes = 0;
+  private debugPeakEnemies = 0;
+  private debugPeakTransientEffects = 0;
+  private debugPeakDrops = 0;
+  private debugPeakSoundEvents = 0;
   private lastAttackSoundElapsed = Number.NEGATIVE_INFINITY;
   private lastXpSoundElapsed = Number.NEGATIVE_INFINITY;
   private combo = 0;
@@ -519,6 +536,9 @@ export class GameWorld {
     this.updateCorrosion(safeDelta);
     if (this.phase !== "playing" || this.runFinalized) return;
     this.updateEnemies(safeDelta);
+    // Enemy defeats can create several drops in one frame. Enforce the same
+    // bound after the producer runs so snapshots never expose an unbounded burst.
+    this.enforceTransientCaps();
     if (this.phase !== "playing") return;
     this.updateMagnetItems(safeDelta);
     this.updateGems(safeDelta);
@@ -845,6 +865,11 @@ export class GameWorld {
     this.debugEntries = 0;
     this.debugProjectilesFired = 0;
     this.debugProjectileCollisions = 0;
+    this.debugPeakSceneMeshes = 0;
+    this.debugPeakEnemies = 0;
+    this.debugPeakTransientEffects = 0;
+    this.debugPeakDrops = 0;
+    this.debugPeakSoundEvents = 0;
     this.emitSnapshot();
   }
 
@@ -1732,7 +1757,7 @@ export class GameWorld {
   private queueSound(cue: GameSoundCue) {
     this.soundEventSequence += 1;
     this.soundEvents.push({ id: this.soundEventSequence, cue });
-    if (this.soundEvents.length > 96) this.soundEvents.splice(0, this.soundEvents.length - 96);
+    if (this.soundEvents.length > MAX_SOUND_EVENTS) this.soundEvents.splice(0, this.soundEvents.length - MAX_SOUND_EVENTS);
   }
 
   private queueAttackSound() {
@@ -2412,14 +2437,32 @@ export class GameWorld {
         if (oldest) dispose(oldest);
       }
     };
+    // Gems merge into the oldest remaining stack so XP is preserved while the
+    // scene still has a hard upper bound.
+    while (this.gems.length > MAX_GEM_MESHES) {
+      const oldest = this.gems.shift();
+      if (!oldest) break;
+      const keeper = this.gems[0];
+      if (keeper) keeper.value += oldest.value;
+      else oldest.mesh.dispose();
+    }
+    trim(this.recoveryItems, MAX_RECOVERY_ITEMS, (item) => item.mesh.dispose());
+    trim(this.magnetItems, MAX_MAGNET_ITEMS, (item) => item.mesh.dispose());
     trim(this.shockwaves, MAX_SHOCKWAVES, (item) => item.mesh.dispose());
     trim(this.energyTraces, MAX_ENERGY_TRACES, (item) => item.mesh.dispose());
     trim(this.projectiles, MAX_PROJECTILES, (item) => item.mesh.dispose());
     trim(this.ricochetShots, MAX_RICOCHET_SHOTS, (item) => item.mesh.dispose());
+    trim(this.gravityCores, MAX_GRAVITY_CORES, (item) => item.mesh.dispose());
+    trim(this.decoys, MAX_DECOYS, (item) => item.mesh.dispose());
+    trim(this.arcShells, MAX_ARC_SHELLS, (item) => item.mesh.dispose());
+    trim(this.splitShells, MAX_SPLIT_SHELLS, (item) => item.mesh.dispose());
+    trim(this.returnBlades, MAX_RETURN_BLADES, (item) => item.mesh.dispose());
+    trim(this.mines, MAX_MINES, (item) => item.mesh.dispose());
     trim(this.skyfallStrikes, MAX_SKYFALL_STRIKES, (item) => item.marker.dispose());
     trim(this.needleDrops, MAX_NEEDLE_DROPS, (item) => item.mesh.dispose());
     trim(this.idleNeedles, MAX_IDLE_NEEDLES, (item) => { item.mesh.dispose(); item.marker.dispose(); });
     trim(this.harpoons, MAX_HARPOONS, (item) => { item.mesh.dispose(); item.cable.dispose(); });
+    trim(this.clusterCores, MAX_CLUSTER_CORES, (item) => item.mesh.dispose());
     trim(this.clusterShards, MAX_CLUSTER_SHARDS, (item) => item.mesh.dispose());
   }
 
@@ -4037,6 +4080,8 @@ export class GameWorld {
   }
 
   private getDebugMetrics(): GameDebugMetrics {
+    const sceneMeshes = this.scene.meshes.length;
+    const enemies = this.enemies.length;
     const transientEffects = this.projectiles.length
       + this.shockwaves.length
       + this.ricochetShots.length
@@ -4053,12 +4098,24 @@ export class GameWorld {
       + this.harpoons.length
       + this.clusterCores.length
       + this.clusterShards.length;
+    const drops = this.gems.length + this.recoveryItems.length + this.magnetItems.length;
+    const soundEvents = this.soundEvents.length;
+    this.debugPeakSceneMeshes = Math.max(this.debugPeakSceneMeshes, sceneMeshes);
+    this.debugPeakEnemies = Math.max(this.debugPeakEnemies, enemies);
+    this.debugPeakTransientEffects = Math.max(this.debugPeakTransientEffects, transientEffects);
+    this.debugPeakDrops = Math.max(this.debugPeakDrops, drops);
+    this.debugPeakSoundEvents = Math.max(this.debugPeakSoundEvents, soundEvents);
     return {
-      sceneMeshes: this.scene.meshes.length,
-      enemies: this.enemies.length,
+      sceneMeshes,
+      enemies,
       transientEffects,
-      drops: this.gems.length + this.recoveryItems.length + this.magnetItems.length,
-      soundEvents: this.soundEvents.length,
+      drops,
+      soundEvents,
+      peakSceneMeshes: this.debugPeakSceneMeshes,
+      peakEnemies: this.debugPeakEnemies,
+      peakTransientEffects: this.debugPeakTransientEffects,
+      peakDrops: this.debugPeakDrops,
+      peakSoundEvents: this.debugPeakSoundEvents,
     };
   }
 
@@ -4123,7 +4180,7 @@ export class GameWorld {
         ? `${this.activeEncounterLabel} // ${Math.max(0, NORMAL_TARGET_SECONDS - Math.floor(this.elapsed))}秒後の作戦完了を目指す`
         : `${this.activeEncounterLabel} // 限界まで成長し、自己最高スコアを更新`;
     const debugMetrics = this.debugMode ? this.getDebugMetrics() : undefined;
-    const debugResourceSuffix = debugMetrics ? ` MESH:${debugMetrics.sceneMeshes} FX:${debugMetrics.transientEffects} DROP:${debugMetrics.drops} SND:${debugMetrics.soundEvents}` : "";
+    const debugResourceSuffix = debugMetrics ? ` MESH:${debugMetrics.sceneMeshes} FX:${debugMetrics.transientEffects} DROP:${debugMetrics.drops} SND:${debugMetrics.soundEvents} PEAK:MESH:${debugMetrics.peakSceneMeshes} ENEMY:${debugMetrics.peakEnemies} FX:${debugMetrics.peakTransientEffects} DROP:${debugMetrics.peakDrops} SND:${debugMetrics.peakSoundEvents}` : "";
     this.onSnapshot({
       phase: this.phase,
       mode: this.mode,

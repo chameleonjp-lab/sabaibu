@@ -100,6 +100,11 @@ export interface GameDebugMetrics {
   transientEffects: number;
   drops: number;
   soundEvents: number;
+  peakSceneMeshes: number;
+  peakEnemies: number;
+  peakTransientEffects: number;
+  peakDrops: number;
+  peakSoundEvents: number;
 }
 
 export interface GameSnapshot {
