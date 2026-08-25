@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { createGameScene, type GameHandle } from "@/game/scene";
 import { GAME_ASSETS } from "@/game/assets";
+import { selectSoundEventsForPlayback } from "@/game/rules";
 import { MODULE_UPGRADES, type BossRewardId, type GameMode, type GameSnapshot, type IconId, type ModuleId, type UpgradeId } from "@/game/types";
 import { WEAPON_LIBRARY } from "@/game/weaponCatalog";
 import KillMilestoneRain from "@/components/KillMilestoneRain";
@@ -783,8 +784,8 @@ export default function GameCanvas() {
   useEffect(() => {
     const next = snapshotView;
     if (runStarted) {
-      for (const event of next.soundEvents ?? []) {
-        if (event.id <= lastSoundEventIdRef.current) continue;
+      const playback = selectSoundEventsForPlayback(next.soundEvents ?? [], lastSoundEventIdRef.current);
+      for (const event of playback.events) {
         audio.play(event.cue);
         if (event.cue === "kill" || event.cue.startsWith("kill-")) setAnnouncement(`撃破数 ${next.kills}。`);
         if (event.cue === "level-up") setAnnouncement(`レベル${next.level}。強化を選んでください。`);
@@ -800,8 +801,8 @@ export default function GameCanvas() {
           setAnnouncement(outcomeLabel(next.outcome));
           void submitRankingScore(next);
         }
-        lastSoundEventIdRef.current = event.id;
       }
+      lastSoundEventIdRef.current = playback.nextEventId;
     }
   }, [audio, runStarted, snapshotView, submitRankingScore]);
 
