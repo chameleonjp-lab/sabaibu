@@ -28,6 +28,11 @@ import {
   NORMAL_SENTINEL_MAX_LEVEL,
   NORMAL_SENTINEL_OVERFLOW_HEAL,
   NORMAL_TARGET_SECONDS,
+  MAX_PLAYER_LEVEL,
+  MAX_TRACKED_DAMAGE_HITS,
+  MAX_TRACKED_DAMAGE_TAKEN,
+  MAX_TRACKED_KILLS,
+  MAX_TRACKED_SECONDS,
   PLAYER_MAX_HEALTH_CAP,
   PLAYER_RING_CONTACT_DAMAGE,
   UTILITY_SLOT_LIMIT,
@@ -480,8 +485,8 @@ export class GameWorld {
     if (this.disposed) return;
     if (this.phase !== "playing") return;
     if (this.tryAdvanceLevel()) return;
-    const safeDelta = Math.min(delta, 0.05);
-    this.elapsed += safeDelta;
+    const safeDelta = Number.isFinite(delta) ? Math.min(Math.max(delta, 0), 0.05) : 0;
+    this.elapsed = Math.min(MAX_TRACKED_SECONDS, this.elapsed + safeDelta);
     this.dodgeCooldown = Math.max(0, this.dodgeCooldown - safeDelta);
     this.dodgeInvulnerable = Math.max(0, this.dodgeInvulnerable - safeDelta);
     this.dodgeBoostSeconds = Math.max(0, this.dodgeBoostSeconds - safeDelta);
@@ -3721,8 +3726,8 @@ export class GameWorld {
     const finalDamage = Math.max(1, Math.ceil(amount * (1 - reactiveMitigation)));
     const healthBefore = this.health;
     this.health = Math.max(0, this.health - finalDamage);
-    this.damageHits += 1;
-    this.damageTaken += finalDamage;
+    this.damageHits = Math.min(MAX_TRACKED_DAMAGE_HITS, this.damageHits + 1);
+    this.damageTaken = Math.min(MAX_TRACKED_DAMAGE_TAKEN, this.damageTaken + finalDamage);
     this.damageTimer = cooldown;
     this.lastDamageSource = source;
     this.combo = 0;
@@ -3781,7 +3786,7 @@ export class GameWorld {
     enemy.strikerMarker?.dispose();
     enemy.bossMarker?.dispose();
     enemy.mesh.dispose();
-    this.kills += 1;
+    this.kills = Math.min(MAX_TRACKED_KILLS, this.kills + 1);
     this.queueSound(enemy.kind === "bulwark" ? "kill-bulwark" : enemy.kind === "striker" ? "kill-striker" : "kill-scout");
     this.combo += 1;
     this.comboTimer = COMBO_WINDOW_SECONDS;
@@ -3939,8 +3944,12 @@ export class GameWorld {
   }
 
   private addExperience(amount: number) {
-    if (this.phase !== "playing" || amount <= 0) return;
-    this.xp += amount;
+    if (this.phase !== "playing" || !Number.isFinite(amount) || amount <= 0) return;
+    if (this.level >= MAX_PLAYER_LEVEL) {
+      this.xp = Math.min(Math.max(0, this.xp), Math.max(0, this.xpNeeded - 1));
+      return;
+    }
+    this.xp = Math.min(Number.MAX_SAFE_INTEGER, this.xp + amount);
     if (this.elapsed - this.lastXpSoundElapsed >= 0.06) {
       this.lastXpSoundElapsed = this.elapsed;
       this.queueSound("xp");
@@ -3950,10 +3959,17 @@ export class GameWorld {
 
   private tryAdvanceLevel() {
     if (this.phase !== "playing") return false;
+    if (this.level >= MAX_PLAYER_LEVEL) {
+      this.xp = Math.min(Math.max(0, this.xp), Math.max(0, this.xpNeeded - 1));
+      return false;
+    }
     if (this.xp < this.xpNeeded) return false;
     this.xp -= this.xpNeeded;
-    this.level += 1;
+    this.level = Math.min(MAX_PLAYER_LEVEL, this.level + 1);
     this.xpNeeded = this.getExperienceNeeded(this.level);
+    if (this.level >= MAX_PLAYER_LEVEL) {
+      this.xp = Math.min(Math.max(0, this.xp), Math.max(0, this.xpNeeded - 1));
+    }
     this.phase = "upgrade";
     this.prepareUpgradeChoices();
     this.queueSound("level-up");
