@@ -3665,6 +3665,9 @@ export class GameWorld {
 
   private isEnemyDodgeThreatened(enemy: Enemy, origin: Vector3) {
     if (!this.isInsideContainment(enemy)) return false;
+    // A decoy redirects this enemy's threat away from the player. Do not award
+    // Perfect Dodge for an attack that cannot actually damage the player.
+    if (this.getDecoyTarget(enemy)) return false;
     const contactRadius = PLAYER_RING_RADIUS + this.getEnemyHitRadius(enemy) + 0.38;
     if (enemy.strikerAction === "dash" || (enemy.strikerAction === "windup" && enemy.strikerTimer <= DODGE_PERFECT_WINDOW_SECONDS)) {
       const dashEnd = enemy.mesh.position.add(enemy.strikerVector.scale(8));
