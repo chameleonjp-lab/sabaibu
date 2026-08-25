@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
 import { Scene } from "@babylonjs/core/scene";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { GameWorld } from "./GameWorld";
 import type { GameSnapshot } from "./types";
 import { PLAYER_MAX_HEALTH_CAP } from "./rules";
@@ -316,6 +317,12 @@ type EndlessRuntime = {
   getBossRewardOptions: () => Array<{ id: string; enabled: boolean }>;
   updateHighVariantAction: (enemy: unknown, canThreatenPlayer: boolean, delta: number) => number;
   setupHighVariantPreview: (level: number) => void;
+  moduleTiers: Record<string, number>;
+  deployDecoy: () => void;
+  isEnemyDodgeThreatened: (enemy: unknown, origin: Vector3) => boolean;
+  perfectDodges: number;
+  dodgeCooldown: number;
+  dodgeInvulnerable: number;
 };
 
 const createEndlessWorld = (onSnapshot: (snapshot: GameSnapshot) => void = () => undefined) => {
@@ -393,6 +400,28 @@ describe("GameWorld Endless high-level enemies", () => {
       scene.dispose();
       engine.dispose();
     }
+  });
+
+  it("does not grant Perfect Dodge when a decoy has redirected a pulse enemy", () => {
+    stubWindow();
+    const { engine, scene, world, runtime } = createEndlessWorld();
+    runtime.setupHighVariantPreview(60);
+    const pulseEnemy = runtime.enemies.find((enemy) => enemy.highVariant === "void-archon");
+    expect(pulseEnemy).toBeDefined();
+
+    pulseEnemy!.mesh.position.x = 0;
+    pulseEnemy!.mesh.position.z = 0;
+    pulseEnemy!.variantTelegraphTimer = 0.2;
+    runtime.moduleTiers.decoy = 1;
+    runtime.deployDecoy();
+
+    expect(runtime.isEnemyDodgeThreatened(pulseEnemy, new Vector3(0, 0, 0))).toBe(false);
+    world.requestDodge();
+    expect(runtime.perfectDodges).toBe(0);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
   });
 
   it("resolves a high-level pulse attack and allows the enemy to be defeated", () => {
