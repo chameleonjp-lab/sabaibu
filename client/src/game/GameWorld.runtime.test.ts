@@ -665,7 +665,8 @@ describe("GameWorld Endless long-run timing", () => {
         expect(metrics?.peakSoundEvents).toBeLessThanOrEqual(96);
         expect(metrics?.peakSceneMeshes).toBeLessThanOrEqual(4_000);
         expect(metrics?.soundEvents).toBeLessThanOrEqual(96);
-        expect(runtime.soundEvents.every((event, index, events) => index === 0 || event.id > events[index - 1].id)).toBe(true);
+        const soundEvents = latestSnapshot?.soundEvents ?? [];
+        expect(soundEvents.every((event, index, events) => index === 0 || event.id > events[index - 1].id)).toBe(true);
       }
     }
 
