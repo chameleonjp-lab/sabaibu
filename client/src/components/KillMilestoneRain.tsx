@@ -4,6 +4,8 @@ import { getCrossedKillMilestones } from "@/game/rules";
 
 const RAIN_DURATION_MS = 5_000;
 const PARTICLE_COUNT = 44;
+// The latest particle must finish before the five-second celebration is removed.
+const PARTICLE_MAX_DELAY_TENTHS = 26;
 
 type Celebration = {
   id: number;
@@ -21,7 +23,7 @@ type RainParticleStyle = CSSProperties & {
 
 const PARTICLES: readonly RainParticleStyle[] = Array.from({ length: PARTICLE_COUNT }, (_, index) => ({
   "--rain-x": `${4 + ((index * 37) % 93)}%`,
-  "--rain-delay": `${((index * 17) % 41) / 10}s`,
+  "--rain-delay": `${((index * 17) % PARTICLE_MAX_DELAY_TENTHS) / 10}s`,
   "--rain-duration": `${1.65 + ((index * 11) % 7) * 0.11}s`,
   "--rain-drift": `${-42 + ((index * 29) % 85)}px`,
   "--rain-rotation": `${-28 + ((index * 19) % 57)}deg`,
