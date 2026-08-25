@@ -538,6 +538,10 @@ export class GameWorld {
     if (this.touchDirection.lengthSquared() > 1) this.touchDirection.normalize();
   }
 
+  isSimulationRunning() {
+    return !this.disposed && this.phase === "playing";
+  }
+
   setPaused(paused: boolean) {
     if (paused && this.phase === "playing") {
       this.phase = "paused";
