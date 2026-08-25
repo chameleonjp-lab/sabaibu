@@ -4,7 +4,15 @@ import { Scene } from "@babylonjs/core/scene";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { GameWorld } from "./GameWorld";
 import type { GameSnapshot } from "./types";
-import { ENDLESS_MAX_ENEMIES, PLAYER_MAX_HEALTH_CAP } from "./rules";
+import {
+  ENDLESS_MAX_ENEMIES,
+  MAX_TRACKED_BOSSES_DEFEATED,
+  MAX_TRACKED_COMBAT_DAMAGE,
+  MAX_TRACKED_COMBO,
+  MAX_TRACKED_KILLS,
+  MAX_TRACKED_PERFECT_DODGES,
+  PLAYER_MAX_HEALTH_CAP,
+} from "./rules";
 
 type RuntimeEnemy = { hp: number; missionBossStage?: 1 | 2 | 3 };
 type RuntimeWorld = {
@@ -307,6 +315,7 @@ type EndlessRuntime = {
     speed: number;
     contactDamage: number;
     milestoneBoss?: boolean;
+    lastDamagedBy?: string;
     highVariant?: string;
     enteringContainment: boolean;
     variantTimer: number;
@@ -334,6 +343,13 @@ type EndlessRuntime = {
   deployDecoy: () => void;
   isEnemyDodgeThreatened: (enemy: unknown, origin: Vector3) => boolean;
   perfectDodges: number;
+  dodgePerfectRegistered: boolean;
+  bossesDefeated: number;
+  combo: number;
+  maxCombo: number;
+  combatStats: Record<string, { damage: number; kills: number }>;
+  recordDamage: (source: string, damage: number) => void;
+  registerPerfectDodge: () => void;
   dodgeCooldown: number;
   dodgeInvulnerable: number;
   damagePlayer: (amount: number, cooldown: number, source: "contact") => string;
@@ -714,6 +730,52 @@ describe("GameWorld Endless high-level enemies", () => {
     expect(runtime.destroyEnemy(pulseEnemy!)).toBe(true);
     expect(runtime.kills).toBe(1);
     expect(runtime.phase).toBe("playing");
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+});
+
+
+describe("GameWorld Endless counter caps", () => {
+  it("keeps combat statistics, combo, dodge, and boss counts finite", () => {
+    stubWindow();
+    const { engine, scene, world, runtime } = createEndlessWorld();
+
+    runtime.recordDamage("rail", Number.POSITIVE_INFINITY);
+    expect(runtime.combatStats.rail.damage).toBe(0);
+    runtime.recordDamage("rail", MAX_TRACKED_COMBAT_DAMAGE + 1);
+    expect(runtime.combatStats.rail.damage).toBe(MAX_TRACKED_COMBAT_DAMAGE);
+    runtime.recordDamage("rail", 10);
+    expect(runtime.combatStats.rail.damage).toBe(MAX_TRACKED_COMBAT_DAMAGE);
+
+    runtime.perfectDodges = MAX_TRACKED_PERFECT_DODGES;
+    runtime.dodgePerfectRegistered = false;
+    runtime.registerPerfectDodge();
+    expect(runtime.perfectDodges).toBe(MAX_TRACKED_PERFECT_DODGES);
+
+    runtime.spawnEnemy("scout", undefined, false);
+    const enemy = runtime.enemies[0];
+    enemy.hp = 0;
+    enemy.lastDamagedBy = "rail";
+    runtime.kills = MAX_TRACKED_KILLS;
+    runtime.combo = MAX_TRACKED_COMBO;
+    runtime.maxCombo = MAX_TRACKED_COMBO;
+    runtime.combatStats.rail.kills = MAX_TRACKED_KILLS;
+    expect(runtime.destroyEnemy(enemy)).toBe(true);
+    expect(runtime.kills).toBe(MAX_TRACKED_KILLS);
+    expect(runtime.combo).toBe(MAX_TRACKED_COMBO);
+    expect(runtime.maxCombo).toBe(MAX_TRACKED_COMBO);
+    expect(runtime.combatStats.rail.kills).toBe(MAX_TRACKED_KILLS);
+
+    runtime.spawnEnemy("scout", undefined, false);
+    const boss = runtime.enemies[0];
+    boss.hp = 0;
+    boss.milestoneBoss = true;
+    runtime.bossesDefeated = MAX_TRACKED_BOSSES_DEFEATED;
+    expect(runtime.destroyEnemy(boss)).toBe(true);
+    expect(runtime.bossesDefeated).toBe(MAX_TRACKED_BOSSES_DEFEATED);
 
     world.dispose();
     scene.dispose();

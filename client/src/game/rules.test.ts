@@ -10,10 +10,15 @@ import {
   DODGE_PERFECT_WINDOW_SECONDS,
   EVOLUTION_RECIPES,
   KILL_MILESTONE_INTERVAL,
+  MAX_ACTIVE_MILESTONE_CELEBRATIONS,
   MAX_PLAYER_LEVEL,
+  MAX_TRACKED_BOSSES_DEFEATED,
+  MAX_TRACKED_COMBAT_DAMAGE,
+  MAX_TRACKED_COMBO,
   MAX_TRACKED_DAMAGE_HITS,
   MAX_TRACKED_DAMAGE_TAKEN,
   MAX_TRACKED_KILLS,
+  MAX_TRACKED_PERFECT_DODGES,
   MAX_TRACKED_SECONDS,
   NORMAL_BOSS_TIMINGS,
   NORMAL_FINAL_BOSS_HP_MULTIPLIER,
@@ -37,6 +42,7 @@ import {
   getDueNormalBossStage,
   getCrossedKillMilestones,
   getEvolutionRecipe,
+  retainLatestMilestoneCelebrations,
   getNextNormalBossTime,
   getSecondsUntilNextNormalBoss,
   isNormalTargetReached,
@@ -166,6 +172,12 @@ describe("Endless long-run caps", () => {
     expect(MAX_PLAYER_LEVEL).toBe(200);
     expect(MAX_TRACKED_DAMAGE_HITS).toBe(100_000);
     expect(MAX_TRACKED_DAMAGE_TAKEN).toBe(100_000_000);
+    expect(MAX_TRACKED_COMBO).toBe(MAX_TRACKED_KILLS);
+    expect(MAX_TRACKED_PERFECT_DODGES).toBe(MAX_TRACKED_KILLS);
+    expect(MAX_TRACKED_BOSSES_DEFEATED).toBe(MAX_TRACKED_KILLS);
+    expect(MAX_TRACKED_COMBAT_DAMAGE).toBe(1_000_000_000);
+    expect(MAX_ACTIVE_MILESTONE_CELEBRATIONS).toBe(8);
+    expect(retainLatestMilestoneCelebrations([1, 2, 3], [4, 5, 6, 7, 8, 9, 10])).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
 
     expect(getCrossedKillMilestones(MAX_TRACKED_KILLS - 1, MAX_TRACKED_KILLS + 1)).toEqual([MAX_TRACKED_KILLS]);
     expect(getCrossedKillMilestones(MAX_TRACKED_KILLS, MAX_TRACKED_KILLS + 1)).toEqual([]);
