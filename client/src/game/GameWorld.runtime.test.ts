@@ -303,6 +303,9 @@ type EndlessRuntime = {
   kills: number;
   enemies: Array<{
     hp: number;
+    maxHp: number;
+    speed: number;
+    contactDamage: number;
     milestoneBoss?: boolean;
     highVariant?: string;
     enteringContainment: boolean;
@@ -321,6 +324,12 @@ type EndlessRuntime = {
   spawnTimer: number;
   xp: number;
   xpNeeded: number;
+  damage: number;
+  weaponTier: number;
+  scatterTier: number;
+  orbitTier: number;
+  hasScatter: boolean;
+  hasOrbit: boolean;
   moduleTiers: Record<string, number>;
   deployDecoy: () => void;
   isEnemyDodgeThreatened: (enemy: unknown, origin: Vector3) => boolean;
@@ -419,6 +428,146 @@ describe("GameWorld Endless enemy density", () => {
     engine.dispose();
   });
 
+  it("caps every Endless combat, drop, and sound queue during a synthetic spike", () => {
+    stubWindow();
+    const { engine, scene, world } = createEndlessWorld();
+    type Disposable = { dispose: () => void };
+    type ResourceItem = { mesh: Disposable; marker?: Disposable; cable?: Disposable; value?: number };
+    type ResourceRuntime = {
+      gems: ResourceItem[];
+      recoveryItems: ResourceItem[];
+      magnetItems: ResourceItem[];
+      projectiles: ResourceItem[];
+      shockwaves: ResourceItem[];
+      ricochetShots: ResourceItem[];
+      gravityCores: ResourceItem[];
+      decoys: ResourceItem[];
+      arcShells: ResourceItem[];
+      splitShells: ResourceItem[];
+      returnBlades: ResourceItem[];
+      energyTraces: ResourceItem[];
+      mines: ResourceItem[];
+      skyfallStrikes: ResourceItem[];
+      needleDrops: ResourceItem[];
+      idleNeedles: ResourceItem[];
+      harpoons: ResourceItem[];
+      clusterCores: ResourceItem[];
+      clusterShards: ResourceItem[];
+      soundEvents: Array<{ id: number; cue: string }>;
+      queueSound: (cue: "attack") => void;
+      enforceTransientCaps: () => void;
+    };
+    const runtime = world as unknown as ResourceRuntime;
+    const disposable = (): Disposable => ({ dispose: vi.fn() });
+    const fill = (items: ResourceItem[], count: number, withMarker = false, withCable = false, withValue = false) => {
+      while (items.length < count) {
+        items.push({
+          mesh: disposable(),
+          ...(withMarker ? { marker: disposable() } : {}),
+          ...(withCable ? { cable: disposable() } : {}),
+          ...(withValue ? { value: 1 } : {}),
+        });
+      }
+    };
+
+    fill(runtime.gems, 101, false, false, true);
+    fill(runtime.recoveryItems, 49);
+    fill(runtime.magnetItems, 49);
+    fill(runtime.projectiles, 121);
+    fill(runtime.shockwaves, 181);
+    fill(runtime.ricochetShots, 97);
+    fill(runtime.gravityCores, 25);
+    fill(runtime.decoys, 25);
+    fill(runtime.arcShells, 97);
+    fill(runtime.splitShells, 97);
+    fill(runtime.returnBlades, 49);
+    fill(runtime.energyTraces, 121);
+    fill(runtime.mines, 25);
+    fill(runtime.skyfallStrikes, 65, true);
+    fill(runtime.needleDrops, 129);
+    fill(runtime.idleNeedles, 65, true);
+    fill(runtime.harpoons, 33, false, true);
+    fill(runtime.clusterCores, 97);
+    fill(runtime.clusterShards, 129);
+
+    runtime.enforceTransientCaps();
+
+    expect(runtime.gems).toHaveLength(100);
+    expect(runtime.gems.reduce((total, item) => total + (item.value ?? 0), 0)).toBe(101);
+    expect(runtime.recoveryItems).toHaveLength(48);
+    expect(runtime.magnetItems).toHaveLength(48);
+    expect(runtime.projectiles).toHaveLength(120);
+    expect(runtime.shockwaves).toHaveLength(180);
+    expect(runtime.ricochetShots).toHaveLength(96);
+    expect(runtime.gravityCores).toHaveLength(24);
+    expect(runtime.decoys).toHaveLength(24);
+    expect(runtime.arcShells).toHaveLength(96);
+    expect(runtime.splitShells).toHaveLength(96);
+    expect(runtime.returnBlades).toHaveLength(48);
+    expect(runtime.energyTraces).toHaveLength(120);
+    expect(runtime.mines).toHaveLength(24);
+    expect(runtime.skyfallStrikes).toHaveLength(64);
+    expect(runtime.needleDrops).toHaveLength(128);
+    expect(runtime.idleNeedles).toHaveLength(64);
+    expect(runtime.harpoons).toHaveLength(32);
+    expect(runtime.clusterCores).toHaveLength(96);
+    expect(runtime.clusterShards).toHaveLength(128);
+
+    for (let index = 0; index < 120; index += 1) runtime.queueSound("attack");
+    expect(runtime.soundEvents).toHaveLength(96);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("keeps resource peaks bounded during a 60-second mixed Endless combat simulation", () => {
+    stubWindow();
+    let latestSnapshot: GameSnapshot | undefined;
+    const { engine, scene, world, runtime } = createEndlessWorld((snapshot) => { latestSnapshot = snapshot; }, true);
+
+    runtime.setupHighVariantPreview(60);
+    runtime.milestoneBossLevels.add(60);
+    for (const moduleId of Object.keys(runtime.moduleTiers)) runtime.moduleTiers[moduleId] = 3;
+    runtime.hasScatter = true;
+    runtime.hasOrbit = true;
+    runtime.scatterTier = 3;
+    runtime.orbitTier = 7;
+    runtime.weaponTier = 3;
+    runtime.damage = 0;
+    runtime.health = Number.MAX_SAFE_INTEGER;
+    runtime.maxHealth = Number.MAX_SAFE_INTEGER;
+    runtime.xp = 0;
+    runtime.xpNeeded = Number.MAX_SAFE_INTEGER;
+    runtime.spawnTimer = Number.POSITIVE_INFINITY;
+
+    while (runtime.enemies.length < ENDLESS_MAX_ENEMIES) {
+      runtime.spawnEnemy("scout", undefined, false);
+      const enemy = runtime.enemies[runtime.enemies.length - 1];
+      enemy.hp = Number.MAX_SAFE_INTEGER;
+      enemy.maxHp = Number.MAX_SAFE_INTEGER;
+      enemy.speed = 0;
+      enemy.contactDamage = 0;
+      enemy.enteringContainment = false;
+      const angle = runtime.enemies.length * 0.37;
+      enemy.mesh.position.x = Math.cos(angle) * 9;
+      enemy.mesh.position.z = Math.sin(angle) * 9;
+    }
+
+    for (let step = 0; step < 1_200; step += 1) world.update(0.05);
+
+    expect(runtime.phase).toBe("playing");
+    expect(runtime.enemies.length).toBeLessThanOrEqual(ENDLESS_MAX_ENEMIES);
+    expect(latestSnapshot?.debugMetrics?.peakEnemies).toBeLessThanOrEqual(ENDLESS_MAX_ENEMIES);
+    expect(latestSnapshot?.debugMetrics?.peakTransientEffects).toBeLessThanOrEqual(1_340);
+    expect(latestSnapshot?.debugMetrics?.peakDrops).toBeLessThanOrEqual(196);
+    expect(latestSnapshot?.debugMetrics?.peakSoundEvents).toBeLessThanOrEqual(96);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
   it("reports mesh, transient-effect, drop, and sound counts in debug mode", () => {
     stubWindow();
     let latestSnapshot: GameSnapshot | undefined;
@@ -429,10 +578,16 @@ describe("GameWorld Endless enemy density", () => {
     expect(latestSnapshot?.debugMetrics?.transientEffects).toBeGreaterThanOrEqual(0);
     expect(latestSnapshot?.debugMetrics?.drops).toBeGreaterThanOrEqual(0);
     expect(latestSnapshot?.debugMetrics?.soundEvents).toBeGreaterThanOrEqual(0);
+    expect(latestSnapshot?.debugMetrics?.peakSceneMeshes).toBeGreaterThanOrEqual(latestSnapshot?.debugMetrics?.sceneMeshes ?? 0);
+    expect(latestSnapshot?.debugMetrics?.peakEnemies).toBeGreaterThanOrEqual(latestSnapshot?.debugMetrics?.enemies ?? 0);
+    expect(latestSnapshot?.debugMetrics?.peakTransientEffects).toBeGreaterThanOrEqual(latestSnapshot?.debugMetrics?.transientEffects ?? 0);
+    expect(latestSnapshot?.debugMetrics?.peakDrops).toBeGreaterThanOrEqual(latestSnapshot?.debugMetrics?.drops ?? 0);
+    expect(latestSnapshot?.debugMetrics?.peakSoundEvents).toBeGreaterThanOrEqual(latestSnapshot?.debugMetrics?.soundEvents ?? 0);
     expect(latestSnapshot?.debugStatus).toContain("MESH:");
     expect(latestSnapshot?.debugStatus).toContain("FX:");
     expect(latestSnapshot?.debugStatus).toContain("DROP:");
     expect(latestSnapshot?.debugStatus).toContain("SND:");
+    expect(latestSnapshot?.debugStatus).toContain("PEAK:MESH:");
 
     world.dispose();
     scene.dispose();
