@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { canSubmitRankingResult, createClientRunId, normalizeRankingName, rankingSlugForMode } from "@/hooks/useGameRanking";
+import { RANKING_ENABLED, canSubmitRankingResult, createClientRunId, normalizeRankingName, rankingSlugForMode } from "@/hooks/useGameRanking";
 
 describe("verified ranking contract", () => {
+  it("keeps ranking disabled until server-authoritative validation is ready", () => {
+    expect(RANKING_ENABLED).toBe(false);
+  });
+
   afterEach(() => vi.unstubAllGlobals());
 
   it("creates a valid one-time id even without Web Crypto", () => {
