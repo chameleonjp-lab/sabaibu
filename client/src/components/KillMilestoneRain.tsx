@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
-import { getCrossedKillMilestones } from "@/game/rules";
+import { getCrossedKillMilestones, MAX_ACTIVE_MILESTONE_CELEBRATIONS, retainLatestMilestoneCelebrations } from "@/game/rules";
 
 const RAIN_DURATION_MS = 5_000;
 const PARTICLE_COUNT = 44;
@@ -60,9 +60,12 @@ export default function KillMilestoneRain({ kills }: { kills: number }) {
       id: nextCelebrationIdRef.current++,
       milestone,
     }));
-    setCelebrations((current) => [...current, ...additions]);
+    // Keep only the latest boundaries when a throttled/debugged snapshot crosses many at once.
+    // Each retained boundary still receives its full five-second display window.
+    const visibleAdditions = additions.slice(-MAX_ACTIVE_MILESTONE_CELEBRATIONS);
+    setCelebrations((current) => retainLatestMilestoneCelebrations(current, visibleAdditions));
 
-    for (const celebration of additions) {
+    for (const celebration of visibleAdditions) {
       const timer = window.setTimeout(() => {
         removalTimersRef.current.delete(celebration.id);
         setCelebrations((current) => current.filter(({ id }) => id !== celebration.id));
