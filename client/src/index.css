@@ -634,8 +634,8 @@ button { font: inherit; }
 .weapon-library-trigger small { grid-column: 1; color: rgba(212, 238, 239, 0.66); font: 500 9px/1.35 "IBM Plex Mono", monospace; letter-spacing: 0.06em; }
 .weapon-library-trigger b { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #7eeaff; font: 600 9px "IBM Plex Mono", monospace; letter-spacing: 0.14em; }
 .weapon-library-layer,
-.weapon-detail-layer { position: absolute; inset: 0; z-index: 24; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); background: rgba(2, 5, 7, 0.86); backdrop-filter: blur(9px); }
-.weapon-library-panel { width: min(1040px, 100%); max-height: calc(100dvh - 32px); overflow: auto; overscroll-behavior: contain; touch-action: pan-y; padding: clamp(20px, 4vw, 42px); border: 1px solid rgba(89, 221, 255, 0.56); background: linear-gradient(135deg, rgba(13, 24, 26, 0.99), rgba(5, 10, 11, 0.99)); box-shadow: 0 24px 100px rgba(0, 0, 0, 0.75), inset 0 0 80px rgba(89, 221, 255, 0.045); }
+.weapon-detail-layer { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; overscroll-behavior: none; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); background: rgba(2, 5, 7, 0.86); backdrop-filter: blur(9px); }
+.weapon-library-panel { width: min(1040px, 100%); max-height: 100%; overflow: auto; overscroll-behavior: contain; touch-action: pan-y; padding: clamp(20px, 4vw, 42px); border: 1px solid rgba(89, 221, 255, 0.56); background: linear-gradient(135deg, rgba(13, 24, 26, 0.99), rgba(5, 10, 11, 0.99)); box-shadow: 0 24px 100px rgba(0, 0, 0, 0.75), inset 0 0 80px rgba(89, 221, 255, 0.045); }
 .weapon-library-header, .weapon-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .weapon-library-header h2, .weapon-detail-header h2 { display: flex; align-items: center; gap: 12px; margin: 0; color: #fff7e8; font: italic 700 clamp(32px, 5vw, 58px)/0.9 "Chakra Petch", sans-serif; letter-spacing: 0.03em; }
 .weapon-library-close { flex: 0 0 auto; width: 42px; height: 42px; color: #ffe4b3; cursor: pointer; border: 1px solid rgba(255, 173, 38, 0.62); background: rgba(68, 35, 7, 0.56); font: 400 30px/1 "Noto Sans JP", sans-serif; }
@@ -652,8 +652,8 @@ button { font: inherit; }
 .weapon-library-card small { color: rgba(255, 220, 157, 0.7); font-size: 10px; line-height: 1.35; }
 .weapon-library-card p { grid-column: 1 / -1; margin: 5px 0 15px; color: rgba(244, 239, 226, 0.68); font-size: 10px; line-height: 1.55; }
 .weapon-library-card i { position: absolute; right: 14px; bottom: 11px; color: #ffbd4a; font: 600 8px "IBM Plex Mono", monospace; font-style: normal; letter-spacing: 0.12em; }
-.weapon-detail-layer { z-index: 25; background: rgba(1, 3, 4, 0.7); }
-.weapon-detail-panel { width: min(720px, 100%); max-height: calc(100dvh - 32px); overflow: auto; overscroll-behavior: contain; touch-action: pan-y; padding: clamp(20px, 4vw, 38px); border: 1px solid rgba(255, 173, 38, 0.7); background: linear-gradient(135deg, rgba(22, 25, 22, 0.99), rgba(7, 11, 11, 0.99)); box-shadow: 0 24px 100px rgba(0, 0, 0, 0.8), inset 0 0 70px rgba(255, 173, 38, 0.05); }
+.weapon-detail-layer { z-index: 1001; background: rgba(1, 3, 4, 0.7); }
+.weapon-detail-panel { width: min(720px, 100%); max-height: 100%; overflow: auto; overscroll-behavior: contain; touch-action: pan-y; padding: clamp(20px, 4vw, 38px); border: 1px solid rgba(255, 173, 38, 0.7); background: linear-gradient(135deg, rgba(22, 25, 22, 0.99), rgba(7, 11, 11, 0.99)); box-shadow: 0 24px 100px rgba(0, 0, 0, 0.8), inset 0 0 70px rgba(255, 173, 38, 0.05); }
 .weapon-detail-header h2 { font-size: clamp(28px, 4.5vw, 50px); }
 .weapon-detail-icon { width: 36px; height: 36px; }
 .weapon-detail-lead { margin: 22px 0 18px; padding: 14px 16px; border-left: 2px solid #ffad26; background: rgba(255, 173, 38, 0.06); }
@@ -670,7 +670,8 @@ button { font: inherit; }
 .weapon-synergy-section p { margin: 8px 0 0; color: rgba(215, 245, 243, 0.78); font-size: 11px; line-height: 1.6; }
 .weapon-availability { margin: 16px 0 0; color: rgba(255, 217, 151, 0.72); font-size: 10px; line-height: 1.55; }
 @media (max-width: 760px) {
-  .weapon-library-panel, .weapon-detail-panel { max-height: calc(100dvh - 20px); padding: 18px 15px; }
+  .weapon-library-layer, .weapon-detail-layer { padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }
+  .weapon-library-panel, .weapon-detail-panel { max-height: 100%; padding: 18px 15px; }
   .weapon-library-grid { grid-template-columns: 1fr; gap: 8px; }
   .weapon-library-card { min-height: 126px; }
   .weapon-library-intro { margin: 14px 0 16px; font-size: 11px; }
