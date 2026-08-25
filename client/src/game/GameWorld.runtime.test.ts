@@ -3,6 +3,7 @@ import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
 import { Scene } from "@babylonjs/core/scene";
 import { GameWorld } from "./GameWorld";
 import type { GameSnapshot } from "./types";
+import { PLAYER_MAX_HEALTH_CAP } from "./rules";
 
 type RuntimeEnemy = { hp: number; missionBossStage?: 1 | 2 | 3 };
 type RuntimeWorld = {
@@ -284,6 +285,136 @@ describe("GameWorld normal mission lifecycle", () => {
     expect(runtime.destroyEnemy(finalBoss!)).toBe(true);
     expect(latestSnapshot?.phase).toBe("gameover");
     expect(latestSnapshot?.outcome).toBe("clear");
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+});
+
+
+type EndlessRuntime = {
+  phase: GameSnapshot["phase"];
+  level: number;
+  health: number;
+  maxHealth: number;
+  kills: number;
+  enemies: Array<{
+    hp: number;
+    milestoneBoss?: boolean;
+    highVariant?: string;
+    enteringContainment: boolean;
+    variantTimer: number;
+    variantTelegraphTimer: number;
+    mesh: { position: { x: number; z: number } };
+  }>;
+  milestoneBossLevels: Set<number>;
+  upgradeOptions: Array<{ id: string }>;
+  updateSpawning: (delta: number) => void;
+  spawnEnemy: (kind?: "scout" | "striker" | "bulwark", highVariant?: string, allowHighVariant?: boolean) => void;
+  destroyEnemy: (enemy: { hp: number; milestoneBoss?: boolean }) => boolean;
+  getBossRewardOptions: () => Array<{ id: string; enabled: boolean }>;
+  updateHighVariantAction: (enemy: unknown, canThreatenPlayer: boolean, delta: number) => number;
+  setupHighVariantPreview: (level: number) => void;
+};
+
+const createEndlessWorld = (onSnapshot: (snapshot: GameSnapshot) => void = () => undefined) => {
+  const engine = new NullEngine({ renderWidth: 390, renderHeight: 844, textureSize: 256 });
+  const scene = new Scene(engine);
+  const world = new GameWorld(scene, onSnapshot, false, false, false, false, false, false, false, false, false, undefined, false, 0, 0, 0, 0, 0, 0, false, false, "endless");
+  return { engine, scene, world, runtime: world as unknown as EndlessRuntime };
+};
+
+describe("GameWorld Endless milestone lifecycle", () => {
+  it("runs every scheduled Endless milestone through boss defeat, reward, and resume", () => {
+    stubWindow();
+    for (const level of [5, 10, 15, 20, 30, 40, 50, 60]) {
+      const { engine, scene, world, runtime } = createEndlessWorld();
+      runtime.level = level;
+      runtime.phase = "upgrade";
+      runtime.upgradeOptions = [{ id: "relay" }];
+
+      world.chooseUpgrade("relay");
+
+      expect(runtime.milestoneBossLevels.has(level)).toBe(true);
+      const boss = runtime.enemies.find((enemy) => enemy.milestoneBoss);
+      expect(boss).toBeDefined();
+      expect(runtime.enemies).toHaveLength(1);
+
+      runtime.updateSpawning(1);
+      expect(runtime.enemies).toHaveLength(1);
+
+      boss!.hp = 0;
+      expect(runtime.destroyEnemy(boss!)).toBe(true);
+      expect(runtime.phase).toBe("bossReward");
+      expect(runtime.getBossRewardOptions().every((reward) => reward.enabled)).toBe(true);
+
+      world.chooseBossReward("amplify");
+      expect(runtime.phase).toBe("playing");
+
+      world.dispose();
+      scene.dispose();
+      engine.dispose();
+    }
+  });
+
+  it("applies the shared maximum-health cap to repeated Endless boss rewards", () => {
+    stubWindow();
+    const { engine, scene, world, runtime } = createEndlessWorld();
+
+    runtime.maxHealth = PLAYER_MAX_HEALTH_CAP - 2;
+    runtime.health = PLAYER_MAX_HEALTH_CAP - 2;
+    runtime.phase = "bossReward";
+    world.chooseBossReward("fortify");
+
+    expect(runtime.maxHealth).toBe(PLAYER_MAX_HEALTH_CAP);
+    expect(runtime.health).toBe(PLAYER_MAX_HEALTH_CAP);
+
+    runtime.phase = "bossReward";
+    world.chooseBossReward("fortify");
+    expect(runtime.maxHealth).toBe(PLAYER_MAX_HEALTH_CAP);
+    expect(runtime.health).toBe(PLAYER_MAX_HEALTH_CAP);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+});
+
+describe("GameWorld Endless high-level enemies", () => {
+  it("loads the Lv40, Lv50, and Lv60 high-variant groups", () => {
+    stubWindow();
+    for (const level of [40, 50, 60]) {
+      const { engine, scene, world, runtime } = createEndlessWorld();
+      runtime.setupHighVariantPreview(level);
+      expect(runtime.enemies.length).toBeGreaterThan(0);
+      expect(runtime.enemies.every((enemy) => typeof enemy.highVariant === "string")).toBe(true);
+      world.dispose();
+      scene.dispose();
+      engine.dispose();
+    }
+  });
+
+  it("resolves a high-level pulse attack and allows the enemy to be defeated", () => {
+    stubWindow();
+    const { engine, scene, world, runtime } = createEndlessWorld();
+    runtime.setupHighVariantPreview(60);
+    const pulseEnemy = runtime.enemies.find((enemy) => enemy.highVariant === "void-archon");
+    expect(pulseEnemy).toBeDefined();
+
+    pulseEnemy!.mesh.position.x = 0;
+    pulseEnemy!.mesh.position.z = 0;
+    pulseEnemy!.variantTimer = 0;
+    const healthBefore = runtime.health;
+    runtime.updateHighVariantAction(pulseEnemy, true, 0);
+    expect(pulseEnemy!.variantTelegraphTimer).toBeGreaterThan(0);
+    runtime.updateHighVariantAction(pulseEnemy, true, 0.62);
+    expect(runtime.health).toBeLessThan(healthBefore);
+
+    pulseEnemy!.hp = 0;
+    expect(runtime.destroyEnemy(pulseEnemy!)).toBe(true);
+    expect(runtime.kills).toBe(1);
+    expect(runtime.phase).toBe("playing");
 
     world.dispose();
     scene.dispose();
