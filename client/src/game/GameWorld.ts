@@ -28,6 +28,7 @@ import {
   NORMAL_SENTINEL_MAX_LEVEL,
   NORMAL_SENTINEL_OVERFLOW_HEAL,
   NORMAL_TARGET_SECONDS,
+  PLAYER_MAX_HEALTH_CAP,
   PLAYER_RING_CONTACT_DAMAGE,
   UTILITY_SLOT_LIMIT,
   calculateScoreBreakdown,
@@ -109,7 +110,6 @@ const IDLE_NEEDLE_DAMAGE = 50;
 const BULWARK_DESTRUCTION_BLAST_RADIUS = 2.6;
 const MILESTONE_BOSS_HP_MULTIPLIER = 20;
 const MILESTONE_BOSS_SCALE_MULTIPLIER = 2;
-const PLAYER_MAX_HEALTH_CAP = 200;
 const MODULE_MILESTONE_START_LEVEL = 30;
 const MODULE_MILESTONE_INTERVAL = 7;
 const MAX_GEM_MESHES = 100;
@@ -578,7 +578,7 @@ export class GameWorld {
     if (id === "amplify") {
       this.attackAmplifier += 0.04;
     } else if (id === "fortify") {
-      this.maxHealth += 5;
+      this.maxHealth = Math.min(PLAYER_MAX_HEALTH_CAP, this.maxHealth + 5);
       this.health = Math.min(this.maxHealth, this.health + 5);
     }
     this.activeEncounterLabel = this.mode === "normal" ? "通常侵入" : "戦線再編";
