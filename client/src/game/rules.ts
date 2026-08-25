@@ -22,6 +22,12 @@ export const MAX_TRACKED_SECONDS = 86_400;
 export const MAX_PLAYER_LEVEL = 200;
 export const MAX_TRACKED_DAMAGE_HITS = 100_000;
 export const MAX_TRACKED_DAMAGE_TAKEN = 100_000_000;
+/** Long-run presentation and combat-stat counters use the same finite ceiling. */
+export const MAX_TRACKED_COMBO = MAX_TRACKED_KILLS;
+export const MAX_TRACKED_PERFECT_DODGES = MAX_TRACKED_KILLS;
+export const MAX_TRACKED_BOSSES_DEFEATED = MAX_TRACKED_KILLS;
+/** Per-weapon damage is a result-screen statistic, not a score input. */
+export const MAX_TRACKED_COMBAT_DAMAGE = 1_000_000_000;
 
 /** Simulation timing limits used to keep throttled tabs from fast-forwarding or stalling indefinitely. */
 export const SIMULATION_DEBT_CAP_SECONDS = 5;
@@ -29,6 +35,8 @@ export const SIMULATION_FRAME_BUDGET_SECONDS = 1;
 
 /** Celebrate every 100 confirmed defeats. */
 export const KILL_MILESTONE_INTERVAL = 100;
+/** Keep a large kill jump from mounting unbounded five-second DOM overlays. */
+export const MAX_ACTIVE_MILESTONE_CELEBRATIONS = 8;
 
 /** Hard encounter-density limits used by normal mode. The boss may coexist with 56 regular enemies. */
 export const NORMAL_MAX_ENEMIES = 57;
@@ -126,6 +134,11 @@ export function getCrossedKillMilestones(previousKills: number, currentKills: nu
     milestone += KILL_MILESTONE_INTERVAL;
   }
   return milestones;
+}
+
+/** Retain only the newest five-second milestone overlays after a state update. */
+export function retainLatestMilestoneCelebrations<T>(current: readonly T[], additions: readonly T[]): T[] {
+  return [...current, ...additions].slice(-MAX_ACTIVE_MILESTONE_CELEBRATIONS);
 }
 
 /** Calculate all positive and negative score components without hidden bonuses. */
