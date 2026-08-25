@@ -94,6 +94,14 @@ export interface ScoreBreakdown {
   total: number;
 }
 
+export interface GameDebugMetrics {
+  sceneMeshes: number;
+  enemies: number;
+  transientEffects: number;
+  drops: number;
+  soundEvents: number;
+}
+
 export interface GameSnapshot {
   phase: GamePhase;
   mode: GameMode;
@@ -136,6 +144,7 @@ export interface GameSnapshot {
   rerollsRemaining: number;
   enemyCount: number;
   debugStatus?: string;
+  debugMetrics?: GameDebugMetrics;
   attacks: AttackStatus[];
   totalDamage: number;
   resultStats: AttackResultStat[];
