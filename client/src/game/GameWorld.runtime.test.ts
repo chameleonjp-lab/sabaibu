@@ -544,7 +544,10 @@ describe("GameWorld Endless enemy density", () => {
 
     runtime.setupHighVariantPreview(60);
     runtime.milestoneBossLevels.add(60);
-    for (const moduleId of Object.keys(runtime.moduleTiers)) runtime.moduleTiers[moduleId] = 3;
+    // A real loadout has six module slots. Keep the long-run test legal and
+    // leave the impossible all-module spike to the dedicated 60-second cap test.
+    const activeModules = ["vector", "gravity", "decoy", "split", "skyfall", "cluster"] as const;
+    for (const moduleId of activeModules) runtime.moduleTiers[moduleId] = 3;
     runtime.hasScatter = true;
     runtime.hasOrbit = true;
     runtime.scatterTier = 3;
