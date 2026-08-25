@@ -32,6 +32,12 @@ export const KILL_MILESTONE_INTERVAL = 100;
 
 /** Hard encounter-density limits used by normal mode. The boss may coexist with 56 regular enemies. */
 export const NORMAL_MAX_ENEMIES = 57;
+/** Regular Normal spawning reserves one slot for the scheduled boss. */
+export const NORMAL_MAX_REGULAR_ENEMIES = NORMAL_MAX_ENEMIES - 1;
+/** Maximum total Endless enemies, including one active periodic boss. */
+export const ENDLESS_MAX_ENEMIES = 95;
+/** Regular Endless spawning reserves one slot for the periodic boss. */
+export const ENDLESS_MAX_REGULAR_ENEMIES = ENDLESS_MAX_ENEMIES - 1;
 export const NORMAL_MAX_ENEMIES_PER_SECOND = 4;
 export const NORMAL_HARD_CAPS = {
   enemies: NORMAL_MAX_ENEMIES,
