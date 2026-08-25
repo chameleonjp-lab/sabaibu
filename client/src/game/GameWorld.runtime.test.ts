@@ -323,6 +323,7 @@ type EndlessRuntime = {
   perfectDodges: number;
   dodgeCooldown: number;
   dodgeInvulnerable: number;
+  damagePlayer: (amount: number, cooldown: number, source: "contact") => string;
 };
 
 const createEndlessWorld = (onSnapshot: (snapshot: GameSnapshot) => void = () => undefined) => {
@@ -381,6 +382,32 @@ describe("GameWorld Endless milestone lifecycle", () => {
     world.chooseBossReward("fortify");
     expect(runtime.maxHealth).toBe(PLAYER_MAX_HEALTH_CAP);
     expect(runtime.health).toBe(PLAYER_MAX_HEALTH_CAP);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+});
+
+describe("GameWorld Endless outcome lifecycle", () => {
+  it("finishes Endless as a failed game over after lethal damage", () => {
+    stubWindow();
+    let latestSnapshot: GameSnapshot | undefined;
+    const { engine, scene, world, runtime } = createEndlessWorld((snapshot) => { latestSnapshot = snapshot; });
+
+    runtime.health = 1;
+    runtime.phase = "playing";
+    runtime.dodgeInvulnerable = 0;
+    runtime.damagePlayer(2, 0.6, "contact");
+
+    expect(latestSnapshot?.phase).toBe("gameover");
+    expect(latestSnapshot?.outcome).toBe("failed");
+    expect(latestSnapshot?.health).toBe(0);
+    expect(latestSnapshot?.deathCause).toBe("敵との接触");
+
+    const snapshotAfterGameOver = latestSnapshot;
+    world.update(1);
+    expect(latestSnapshot).toBe(snapshotAfterGameOver);
 
     world.dispose();
     scene.dispose();
