@@ -662,10 +662,11 @@ export default function GameCanvas() {
         pauseForLifecycleChange();
       }
     };
+    // pagehide marks a lifecycle transition even when Safari reports the
+    // document as visible for a short moment. Pause unconditionally so a
+    // returning tab cannot resume with a stale frame delta.
     const onPageHide = () => {
-      if (document.visibilityState === "hidden") {
-        pauseForLifecycleChange();
-      }
+      pauseForLifecycleChange();
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
