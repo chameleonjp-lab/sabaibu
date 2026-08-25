@@ -612,19 +612,41 @@ describe("GameWorld Endless enemy density", () => {
 });
 
 describe("GameWorld Endless long-run timing", () => {
-  it("keeps 10, 30, and 60 minutes of Endless simulation time alive", () => {
+  it("keeps 10, 30, and 60 minutes of active high-level combat alive", () => {
     stubWindow();
-    const { engine, scene, world, runtime } = createEndlessWorld();
+    let latestSnapshot: GameSnapshot | undefined;
+    const { engine, scene, world, runtime } = createEndlessWorld((snapshot) => { latestSnapshot = snapshot; }, true);
 
-    // Isolate the clock and phase transition from random combat so this
-    // deterministic stress test remains stable in CI.
-    runtime.enemies.length = 0;
-    runtime.spawnTimer = Number.POSITIVE_INFINITY;
-    runtime.xp = 0;
-    runtime.xpNeeded = Number.MAX_SAFE_INTEGER;
+    runtime.setupHighVariantPreview(60);
+    // A real loadout has six module slots. Keep the long-run test legal and
+    // leave the impossible all-module spike to the dedicated 60-second cap test.
+    const activeModules = ["vector", "gravity", "decoy", "split", "skyfall", "cluster"] as const;
+    for (const moduleId of activeModules) runtime.moduleTiers[moduleId] = 3;
+    runtime.hasScatter = true;
+    runtime.hasOrbit = true;
+    runtime.scatterTier = 3;
+    runtime.orbitTier = 7;
+    runtime.weaponTier = 3;
+    runtime.damage = 0;
     runtime.health = Number.MAX_SAFE_INTEGER;
     runtime.maxHealth = Number.MAX_SAFE_INTEGER;
+    runtime.xp = 0;
+    runtime.xpNeeded = Number.MAX_SAFE_INTEGER;
+    runtime.spawnTimer = Number.POSITIVE_INFINITY;
 
+    while (runtime.enemies.length < 24) runtime.spawnEnemy("scout", undefined, false);
+    for (const [index, enemy] of runtime.enemies.entries()) {
+      enemy.hp = Number.MAX_SAFE_INTEGER;
+      enemy.maxHp = Number.MAX_SAFE_INTEGER;
+      enemy.speed = 0;
+      enemy.contactDamage = 0;
+      enemy.enteringContainment = false;
+      const angle = index * 0.47;
+      enemy.mesh.position.x = Math.cos(angle) * 9;
+      enemy.mesh.position.z = Math.sin(angle) * 9;
+    }
+
+    world.setTouchDirection(0.42, 0.28);
     const checkpoints = new Map<number, number>([
       [12_000, 600],
       [36_000, 1_800],
@@ -632,15 +654,31 @@ describe("GameWorld Endless long-run timing", () => {
     ]);
     for (let step = 1; step <= 72_000; step += 1) {
       world.update(0.05);
+      if (step % 32 === 0) world.requestDodge();
       const expectedSeconds = checkpoints.get(step);
       if (expectedSeconds !== undefined) {
+        const metrics = latestSnapshot?.debugMetrics;
         expect(runtime.phase).toBe("playing");
         expect(runtime.elapsed).toBeCloseTo(expectedSeconds, 6);
+        expect(runtime.enemies).toHaveLength(24);
+        expect(runtime.enemies.some((enemy) => enemy.highVariant !== undefined)).toBe(true);
+        expect(metrics?.peakEnemies).toBeLessThanOrEqual(ENDLESS_MAX_ENEMIES);
+        expect(metrics?.peakTransientEffects).toBeLessThanOrEqual(1_340);
+        expect(metrics?.peakDrops).toBeLessThanOrEqual(196);
+        expect(metrics?.peakSoundEvents).toBeLessThanOrEqual(96);
+        expect(metrics?.peakSceneMeshes).toBeLessThanOrEqual(4_000);
+        expect(metrics?.soundEvents).toBeLessThanOrEqual(96);
+        const soundEvents = latestSnapshot?.soundEvents ?? [];
+        expect(soundEvents.every((event, index, events) => index === 0 || event.id > events[index - 1].id)).toBe(true);
       }
     }
 
     expect(runtime.elapsed).toBeCloseTo(3_600, 6);
     expect(runtime.phase).toBe("playing");
+    expect(latestSnapshot?.debugMetrics?.peakEnemies).toBeLessThanOrEqual(ENDLESS_MAX_ENEMIES);
+    expect(latestSnapshot?.debugMetrics?.peakTransientEffects).toBeLessThanOrEqual(1_340);
+    expect(latestSnapshot?.debugMetrics?.peakDrops).toBeLessThanOrEqual(196);
+    expect(latestSnapshot?.debugMetrics?.peakSoundEvents).toBeLessThanOrEqual(96);
 
     world.dispose();
     scene.dispose();
