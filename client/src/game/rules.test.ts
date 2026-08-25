@@ -19,6 +19,8 @@ import {
   NORMAL_TARGET_SECONDS,
   PLAYER_RING_CONTACT_DAMAGE,
   PLAYER_MAX_HEALTH_CAP,
+  SIMULATION_DEBT_CAP_SECONDS,
+  SIMULATION_FRAME_BUDGET_SECONDS,
   SCORE_RULES,
   UTILITY_SLOT_LIMIT,
   calculateScoreBreakdown,
@@ -32,6 +34,7 @@ import {
   isObjectiveComplete,
   isRankableOutcome,
   splitSimulationDelta,
+  consumeSimulationDebt,
 } from "./rules";
 
 describe("normal-mode rules", () => {
@@ -113,6 +116,14 @@ describe("normal-mode rules", () => {
     }
     expect(splitSimulationDelta(0.2)).toHaveLength(4);
     expect(splitSimulationDelta(0.2).reduce((sum, step) => sum + step, 0)).toBeCloseTo(0.2, 10);
+  });
+
+  it("bounds throttled-frame debt while preserving a one-second frame budget", () => {
+    expect(SIMULATION_DEBT_CAP_SECONDS).toBe(5);
+    expect(SIMULATION_FRAME_BUDGET_SECONDS).toBe(1);
+    expect(consumeSimulationDebt(0, 1)).toEqual({ budget: 1, remainingDebt: 0 });
+    expect(consumeSimulationDebt(0, 10)).toEqual({ budget: 1, remainingDebt: 4 });
+    expect(consumeSimulationDebt(4, Number.NaN)).toEqual({ budget: 1, remainingDebt: 3 });
   });
 
   it("reports scheduled bosses and evolution recipe requirements", () => {
