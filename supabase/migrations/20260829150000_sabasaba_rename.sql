@@ -312,4 +312,14 @@ begin
 end
 $$;
 
+grant execute on function public.start_sabasaba_run(text, text, uuid, text)
+  to anon, authenticated;
+
+grant execute on function public.submit_sabasaba_run(
+  uuid, text, text, integer, integer, integer, integer, integer, integer, text
+) to anon, authenticated;
+
+revoke execute on function private.guard_sabasaba_score_runs()
+  from public, anon, authenticated;
+
 commit;
