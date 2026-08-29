@@ -8,7 +8,7 @@ const scenarios = [
   },
   {
     name: "調整案",
-    enemyHp: (time) => 14 + Math.floor(time / 25) * 4,
+    enemyHp: (time) => Math.max(18, 14 + Math.floor(time / 25) * 4),
     primaryDamage: (tier) => 14 + (tier - 1) * 8,
     spawnInterval: (time) => Math.max(0.6, 0.9 - time / 150),
     batch: (time) => (time >= 100 ? 2 : 1),
