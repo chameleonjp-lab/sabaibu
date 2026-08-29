@@ -85,6 +85,40 @@ describe("GameWorld damage ordering", () => {
   });
 });
 
+describe("GameWorld stationary hazard policy", () => {
+  it("does not launch the debug-only stationary needle during normal play", () => {
+    stubWindow();
+    const { engine, scene, world } = createNormalWorld(() => undefined);
+    const runtime = world as unknown as {
+      idleNeedles: unknown[];
+      updateIdleHazard: (delta: number, playerMoved: boolean) => void;
+    };
+
+    runtime.updateIdleHazard(1.1, false);
+
+    expect(runtime.idleNeedles).toHaveLength(0);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("keeps a stationary normal run alive long enough to read the opening HUD", () => {
+    stubWindow();
+    let latestSnapshot: GameSnapshot | undefined;
+    const { engine, scene, world } = createNormalWorld((snapshot) => { latestSnapshot = snapshot; });
+
+    for (let frame = 0; frame < 270; frame += 1) world.update(1 / 60);
+
+    expect(latestSnapshot?.phase).toBe("playing");
+    expect(latestSnapshot?.deathCause).toBeNull();
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+});
+
 describe("GameWorld Normal upgrade and boss reward policy", () => {
   it("removes durability upgrades from Normal while keeping Barrier in Endless", () => {
     stubWindow();
