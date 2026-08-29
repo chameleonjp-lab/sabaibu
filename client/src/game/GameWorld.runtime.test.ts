@@ -86,7 +86,7 @@ describe("GameWorld damage ordering", () => {
 });
 
 describe("GameWorld stationary hazard policy", () => {
-  it("does not launch the debug-only stationary needle during normal play", () => {
+  it("keeps the one-second stationary needle enabled during normal play", () => {
     stubWindow();
     const { engine, scene, world } = createNormalWorld(() => undefined);
     const runtime = world as unknown as {
@@ -96,22 +96,30 @@ describe("GameWorld stationary hazard policy", () => {
 
     runtime.updateIdleHazard(1.1, false);
 
-    expect(runtime.idleNeedles).toHaveLength(0);
+    expect(runtime.idleNeedles).toHaveLength(1);
 
     world.dispose();
     scene.dispose();
     engine.dispose();
   });
 
-  it("keeps a stationary normal run alive long enough to read the opening HUD", () => {
+  it("freezes the stationary needle while the run is manually paused", () => {
     stubWindow();
-    let latestSnapshot: GameSnapshot | undefined;
-    const { engine, scene, world } = createNormalWorld((snapshot) => { latestSnapshot = snapshot; });
+    const { engine, scene, world } = createNormalWorld(() => undefined);
+    const runtime = world as unknown as {
+      idleSeconds: number;
+      idleNeedles: Array<{ life: number }>;
+      updateIdleHazard: (delta: number, playerMoved: boolean) => void;
+    };
 
-    for (let frame = 0; frame < 270; frame += 1) world.update(1 / 60);
+    runtime.updateIdleHazard(1.1, false);
+    world.setPaused(true);
+    const pausedIdleSeconds = runtime.idleSeconds;
+    const pausedNeedleLife = runtime.idleNeedles[0]?.life;
+    world.update(2);
 
-    expect(latestSnapshot?.phase).toBe("playing");
-    expect(latestSnapshot?.deathCause).toBeNull();
+    expect(runtime.idleSeconds).toBe(pausedIdleSeconds);
+    expect(runtime.idleNeedles[0]?.life).toBe(pausedNeedleLife);
 
     world.dispose();
     scene.dispose();
