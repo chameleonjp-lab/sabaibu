@@ -20,6 +20,8 @@ import {
   DODGE_DISTANCE,
   DODGE_INVULNERABILITY_SECONDS,
   DODGE_PERFECT_WINDOW_SECONDS,
+  EARLY_SCOUT_MIN_HP,
+  EARLY_STRIKER_MIN_HP,
   EVOLUTION_RECIPES,
   NORMAL_BOSS_TIMINGS,
   NORMAL_FINAL_BOSS_HP_MULTIPLIER,
@@ -524,6 +526,7 @@ export class GameWorld {
     // be allowed to win before the failure check runs.
     this.updateNormalMission(false);
     if (this.phase !== "playing") return;
+    const playerPositionBeforeMovement = this.player.position.clone();
     const playerMoved = this.updatePlayer(safeDelta);
     this.updateDamageWarning(safeDelta);
     this.updateIdleHazard(safeDelta, playerMoved);
@@ -539,7 +542,7 @@ export class GameWorld {
     if (this.phase !== "playing" || this.runFinalized) return;
     this.updateCorrosion(safeDelta);
     if (this.phase !== "playing" || this.runFinalized) return;
-    this.updateEnemies(safeDelta);
+    this.updateEnemies(safeDelta, playerPositionBeforeMovement);
     // Enemy defeats can create several drops in one frame. Enforce the same
     // bound after the producer runs so snapshots never expose an unbounded burst.
     this.enforceTransientCaps();
@@ -1504,7 +1507,7 @@ export class GameWorld {
   private spawnEnemy(kindOverride?: EnemyKind, highVariantOverride?: HighVariantId, allowHighVariant = true) {
     const highVariant = highVariantOverride ?? (allowHighVariant ? this.pickHighVariant() : undefined);
     const kind = kindOverride ?? (highVariant ? "scout" : this.pickEnemyKind());
-    const baseHp = 14 + Math.floor(this.elapsed / 25) * 4;
+    const baseHp = Math.max(EARLY_SCOUT_MIN_HP, 14 + Math.floor(this.elapsed / 25) * 4);
     const baseSpeed = 2.05 + Math.min(1.55, this.elapsed / 120);
     const experienceMultiplier = this.getExperienceRewardMultiplier();
     const variantId = highVariant;
@@ -1512,7 +1515,7 @@ export class GameWorld {
     const profile = variant && variantId
       ? { hp: Math.ceil(baseHp * variant.hp), speed: baseSpeed * variant.speed, scale: variant.scale, contactDamage: variant.contactDamage, xpValue: Math.ceil(variant.xp * experienceMultiplier), material: this.getHighVariantMaterial(variantId), meshType: variant.meshType, meshSize: variant.meshSize }
       : kind === "striker"
-      ? { hp: Math.max(9, Math.ceil(baseHp * 0.7)), speed: baseSpeed * 1.65, scale: 0.72, contactDamage: 3, xpValue: Math.ceil(1 * experienceMultiplier), material: this.strikerMaterial, meshType: 0, meshSize: 0.92 }
+      ? { hp: Math.max(EARLY_STRIKER_MIN_HP, Math.ceil(baseHp * 0.7)), speed: baseSpeed * 1.65, scale: 0.72, contactDamage: 3, xpValue: Math.ceil(1 * experienceMultiplier), material: this.strikerMaterial, meshType: 0, meshSize: 0.92 }
       : kind === "bulwark"
         ? { hp: Math.ceil(baseHp * 3.1), speed: baseSpeed * 0.62, scale: 1.46, contactDamage: 7, xpValue: Math.ceil(4 * experienceMultiplier), material: this.bulwarkMaterial, meshType: 2, meshSize: 1.2 }
         : { hp: baseHp, speed: baseSpeed, scale: 1, contactDamage: 4, xpValue: Math.ceil(2 * experienceMultiplier), material: this.enemyMaterial, meshType: 1, meshSize: 1.05 };
@@ -3326,15 +3329,18 @@ export class GameWorld {
     }
   }
 
-  private updateEnemies(delta: number) {
+  private updateEnemies(delta: number, playerStart = this.player.position) {
     this.damageTimer -= delta;
     this.removeDefeatedEnemies();
     if (!this.isSimulationActive()) return;
     for (const enemy of this.enemies) {
+      const previousPosition = enemy.mesh.position.clone();
       enemy.cryoTime = Math.max(0, enemy.cryoTime - delta);
       enemy.vulnerableTime = Math.max(0, enemy.vulnerableTime - delta);
       if (enemy.enteringContainment) {
         this.updateEnemyIngress(enemy, delta);
+        this.tryEnemyContactDamage(enemy, previousPosition, playerStart);
+        if (!this.isSimulationActive()) return;
         continue;
       }
       if ((enemy.missionBossStage === 1 || enemy.missionBossStage === 2) && !enemy.bossEnraged && enemy.hp / enemy.maxHp <= 0.52) {
@@ -3351,22 +3357,30 @@ export class GameWorld {
       if (enemy.vulnerableTime > 0) {
         enemy.mesh.rotation.y += delta * 2;
         enemy.mesh.scaling.setAll(enemy.scale * (1 + Math.sin(this.elapsed * 18) * 0.08));
+        this.tryEnemyContactDamage(enemy, previousPosition, playerStart);
+        if (!this.isSimulationActive()) return;
         continue;
       }
       const decoy = this.getDecoyTarget(enemy);
       if (enemy.kind === "striker" && this.updateStrikerAction(enemy, Boolean(decoy), delta)) {
         this.constrainEnemyToArena(enemy);
+        this.tryEnemyContactDamage(enemy, previousPosition, playerStart);
+        if (!this.isSimulationActive()) return;
         continue;
       }
       if (enemy.kind === "bulwark") {
         if (!enemy.bossEnraged && enemy.hp / enemy.maxHp <= 0.52) this.triggerBulwarkOverdrive(enemy);
         if (this.updateBulwarkAction(enemy, delta)) {
           this.constrainEnemyToArena(enemy);
+          this.tryEnemyContactDamage(enemy, previousPosition, playerStart);
+          if (!this.isSimulationActive()) return;
           continue;
         }
         enemy.bossCooldown -= delta;
         if (!decoy && enemy.bossCooldown <= 0) {
           this.prepareBulwarkAction(enemy);
+          this.tryEnemyContactDamage(enemy, previousPosition, playerStart);
+          if (!this.isSimulationActive()) return;
           continue;
         }
       }
@@ -3384,10 +3398,8 @@ export class GameWorld {
       this.constrainEnemyToArena(enemy);
       enemy.hitFlash -= delta;
       enemy.mesh.scaling.setAll(enemy.scale * (enemy.hitFlash > 0 ? 1.18 : 1));
-      if (!decoy && this.playerRingTouchesEnemy(enemy) && this.damageTimer <= 0) {
-        this.damagePlayer(PLAYER_RING_CONTACT_DAMAGE, 0.6, "contact");
-        if (!this.isSimulationActive()) return;
-      }
+      this.tryEnemyContactDamage(enemy, previousPosition, playerStart);
+      if (!this.isSimulationActive()) return;
     }
   }
 
@@ -3712,8 +3724,28 @@ export class GameWorld {
     return this.distanceToSegmentSquared(this.player.position, start, end) <= radius * radius;
   }
 
-  private playerRingTouchesEnemy(enemy: Enemy) {
-    return this.playerRingTouchesPoint(enemy.mesh.position, this.getEnemyHitRadius(enemy));
+  private playerRingTouchesMovingEnemy(enemy: Enemy, enemyStart: Vector3, playerStart: Vector3) {
+    const radius = PLAYER_RING_RADIUS + this.getEnemyHitRadius(enemy);
+    const startX = enemyStart.x - playerStart.x;
+    const startZ = enemyStart.z - playerStart.z;
+    const endX = enemy.mesh.position.x - this.player.position.x;
+    const endZ = enemy.mesh.position.z - this.player.position.z;
+    const segmentX = endX - startX;
+    const segmentZ = endZ - startZ;
+    const lengthSquared = segmentX * segmentX + segmentZ * segmentZ;
+    const t = lengthSquared <= 0.0001
+      ? 0
+      : Math.max(0, Math.min(1, -(startX * segmentX + startZ * segmentZ) / lengthSquared));
+    const closestX = startX + segmentX * t;
+    const closestZ = startZ + segmentZ * t;
+    return closestX * closestX + closestZ * closestZ <= radius * radius;
+  }
+
+  private tryEnemyContactDamage(enemy: Enemy, enemyStart: Vector3, playerStart: Vector3) {
+    if (!this.isSimulationActive() || enemy.hp <= 0 || !this.enemies.includes(enemy)) return false;
+    if (enemy.enteringContainment || !this.isInsideContainment(enemy) || this.getDecoyTarget(enemy)) return false;
+    if (!this.playerRingTouchesMovingEnemy(enemy, enemyStart, playerStart)) return false;
+    return this.damagePlayer(PLAYER_RING_CONTACT_DAMAGE, 0.6, "contact") !== "blocked";
   }
 
   private hasImminentDodgeThreat(origin: Vector3) {
