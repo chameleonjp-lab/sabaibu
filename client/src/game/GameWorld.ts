@@ -939,9 +939,6 @@ export class GameWorld {
   }
 
   private updateIdleHazard(delta: number, playerMoved: boolean) {
-    // The stationary-position needle is a debug-only preview. It must never
-    // punish a normal player who pauses to read the HUD or take a screenshot.
-    if (!this.idlePreview) return;
     if (playerMoved) this.idleSeconds = 0;
     else this.idleSeconds += delta;
     this.idleStrikeCooldown = Math.max(0, this.idleStrikeCooldown - delta);
