@@ -13,9 +13,9 @@ export const NORMAL_SENTINEL_OVERFLOW_HEAL = 30;
 /** Contact with the player's visible safety ring is a fixed, separate hit. */
 export const PLAYER_RING_CONTACT_DAMAGE = 2;
 
-/** The opening Rail Pulse deals 14 damage, so opening enemies need two hits. */
+/** The opening Rail Pulse deals 14 damage, so opening enemies need two hits even during its temporary boost. */
 export const EARLY_SCOUT_MIN_HP = 18;
-export const EARLY_STRIKER_MIN_HP = 16;
+export const EARLY_STRIKER_MIN_HP = 17;
 
 /** Shared cap for every maximum-health increase, including Endless boss rewards. */
 export const PLAYER_MAX_HEALTH_CAP = 200;
