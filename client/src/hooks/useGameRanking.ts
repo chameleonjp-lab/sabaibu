@@ -8,7 +8,7 @@ const START_RUN_RPC = "start_sabaibu_run";
 const SUBMIT_RUN_RPC = "submit_sabaibu_run";
 const BEST_RANKING_RPC = "get_best_score_ranking";
 const REQUEST_TIMEOUT_MS = 8_000;
-const RANKING_LIMIT = 5;
+export const RANKING_LIMIT = 10;
 const CLIENT_VERSION = "sabaibu-web-2.0.0-verified-ranking";
 const PENDING_STORAGE_KEY = "sabaibu-ranking-pending-v2";
 
