@@ -1,4 +1,4 @@
--- Keep Sabaibu ranking fully disabled until authoritative combat proof exists.
+-- Keep Sabasaba ranking fully disabled until authoritative combat proof exists.
 -- The write RPCs are already revoked; these guards close the shared read RPCs too.
 
 create or replace function public.get_best_score_ranking(
@@ -19,8 +19,8 @@ security definer
 set search_path = ''
 as $function$
 begin
-  if p_game_slug in ('sabaibu_normal', 'sabaibu_endless') then
-    raise exception 'sabaibu ranking is disabled';
+  if p_game_slug in ('sabasaba_normal', 'sabasaba_endless') then
+    raise exception 'sabasaba ranking is disabled';
   end if;
 
   return query
@@ -86,7 +86,7 @@ as $function$
     join public.games g
       on g.game_slug = gs.game_slug
     where gs.game_slug = p_game_slug
-      and p_game_slug not in ('sabaibu_normal', 'sabaibu_endless')
+      and p_game_slug not in ('sabasaba_normal', 'sabasaba_endless')
     order by
       case when g.score_order = 'asc' then gs.best_score end asc nulls last,
       case when coalesce(g.score_order, 'desc') <> 'asc' then gs.best_score end desc nulls last,
@@ -146,7 +146,7 @@ as $function$
     gs.ranking_status_updated_at
   from public.game_scores gs
   where gs.game_slug = p_game_slug
-    and p_game_slug not in ('sabaibu_normal', 'sabaibu_endless')
+    and p_game_slug not in ('sabasaba_normal', 'sabasaba_endless')
     and gs.ranking_status = 'disqualified'
   order by
     gs.ranking_status_updated_at desc nulls last,
@@ -210,7 +210,7 @@ as $function$
     limit 1
   ) best_run on true
   where gs.game_slug = p_game_slug
-    and p_game_slug not in ('sabaibu_normal', 'sabaibu_endless')
+    and p_game_slug not in ('sabasaba_normal', 'sabasaba_endless')
     and gs.normalized_name = p_normalized_name
   limit 1;
 $function$;

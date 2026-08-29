@@ -4,7 +4,7 @@
 
 ## 実装済みのPages対応アセット
 
-GitHub Pagesはリポジトリ内の静的ファイルだけを配信するため、ゲーム実行に必要な軽量SVGを client/public/assets/ に同梱しています。import.meta.env.BASE_URL 経由で参照し、ローカル開発（/）とプロジェクトPages（/sabaibu/）の両方で同じコードを使います。
+GitHub Pagesはリポジトリ内の静的ファイルだけを配信するため、ゲーム実行に必要な軽量SVGを client/public/assets/ に同梱しています。import.meta.env.BASE_URL 経由で参照し、ローカル開発（/）とプロジェクトPages（/sabasaba/）の両方で同じコードを使います。
 
 | 種別 | 用途 | 同梱ファイル |
 |---|---|---|

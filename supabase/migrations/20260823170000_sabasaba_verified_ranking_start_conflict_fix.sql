@@ -1,5 +1,5 @@
 -- Correct the verified-run start RPC so the upsert targets the composite primary key unambiguously.
-create or replace function public.start_sabaibu_run(
+create or replace function public.start_sabasaba_run(
   p_display_name text,
   p_mode text,
   p_client_run_id uuid,
@@ -23,17 +23,17 @@ begin
   v_normalized_name := public.normalize_player_name(v_display_name);
   if char_length(v_normalized_name) = 0 then raise exception 'name is empty'; end if;
   if char_length(v_normalized_name) > 20 then raise exception 'name is too long'; end if;
-  v_game_slug := case p_mode when 'normal' then 'sabaibu_normal' when 'endless' then 'sabaibu_endless' else null end;
+  v_game_slug := case p_mode when 'normal' then 'sabasaba_normal' when 'endless' then 'sabasaba_endless' else null end;
   if v_game_slug is null then raise exception 'invalid mode'; end if;
   if not exists (select 1 from public.games g where g.game_slug = v_game_slug and g.is_active) then raise exception 'game not found'; end if;
 
   select s.play_token into v_play_token
-  from private.sabaibu_run_sessions s
+  from private.sabasaba_run_sessions s
   where s.client_run_id = p_client_run_id;
   if found then
     if not exists (
       select 1
-      from private.sabaibu_run_sessions s
+      from private.sabasaba_run_sessions s
       where s.client_run_id = p_client_run_id
         and s.normalized_name = v_normalized_name
         and s.game_slug = v_game_slug
@@ -48,7 +48,7 @@ begin
   end if;
 
   v_play_token := gen_random_uuid();
-  insert into private.sabaibu_run_sessions (
+  insert into private.sabasaba_run_sessions (
     play_token, client_run_id, game_slug, normalized_name, display_name, client_version
   ) values (
     v_play_token, p_client_run_id, v_game_slug, v_normalized_name, v_display_name,
@@ -60,7 +60,7 @@ begin
 
   if not v_inserted then
     select s.play_token into v_play_token
-    from private.sabaibu_run_sessions s
+    from private.sabasaba_run_sessions s
     where s.client_run_id = p_client_run_id
       and s.normalized_name = v_normalized_name
       and s.game_slug = v_game_slug;
@@ -99,7 +99,7 @@ begin
 end;
 $$;
 
-revoke execute on function public.start_sabaibu_run(text, text, uuid, text)
+revoke execute on function public.start_sabasaba_run(text, text, uuid, text)
   from public, anon, authenticated;
-grant execute on function public.start_sabaibu_run(text, text, uuid, text)
+grant execute on function public.start_sabasaba_run(text, text, uuid, text)
   to anon, authenticated;

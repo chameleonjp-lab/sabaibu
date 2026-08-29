@@ -1,10 +1,10 @@
--- Verified ranking sessions for sabaibu Normal and Endless.
+-- Verified ranking sessions for sabasaba Normal and Endless.
 -- Remove the earlier provisional RPC overloads before exposing the final contract.
-drop function if exists public.finish_sabaibu_run(uuid, text, integer, integer, integer, integer, integer, text);
-drop function if exists public.start_sabaibu_run(text, text);
-drop table if exists private.sabaibu_runs;
+drop function if exists public.finish_sabasaba_run(uuid, text, integer, integer, integer, integer, integer, text);
+drop function if exists public.start_sabasaba_run(text, text);
+drop table if exists private.sabasaba_runs;
 
-create table if not exists private.sabaibu_run_sessions (
+create table if not exists private.sabasaba_run_sessions (
   play_token uuid primary key default gen_random_uuid(),
   client_run_id uuid not null unique,
   game_slug text not null,
@@ -22,33 +22,33 @@ create table if not exists private.sabaibu_run_sessions (
   damage_hits integer,
   damage_taken integer,
   score integer,
-  constraint sabaibu_run_game_slug check (game_slug in ('sabaibu_normal', 'sabaibu_endless'))
+  constraint sabasaba_run_game_slug check (game_slug in ('sabasaba_normal', 'sabasaba_endless'))
 );
 
-alter table private.sabaibu_run_sessions enable row level security;
-revoke all on private.sabaibu_run_sessions from public, anon, authenticated;
-create index if not exists sabaibu_run_sessions_name_mode_started_idx
-  on private.sabaibu_run_sessions (normalized_name, game_slug, started_at desc);
-create index if not exists sabaibu_run_sessions_status_expiry_idx
-  on private.sabaibu_run_sessions (status, expires_at);
+alter table private.sabasaba_run_sessions enable row level security;
+revoke all on private.sabasaba_run_sessions from public, anon, authenticated;
+create index if not exists sabasaba_run_sessions_name_mode_started_idx
+  on private.sabasaba_run_sessions (normalized_name, game_slug, started_at desc);
+create index if not exists sabasaba_run_sessions_status_expiry_idx
+  on private.sabasaba_run_sessions (status, expires_at);
 
 -- Preserve old rows for audit, but do not allow a pre-contract score to remain a best score.
 update public.score_runs
-set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('source', 'sabaibu_legacy_unverified')
-where game_slug in ('sabaibu_normal', 'sabaibu_endless')
-  and coalesce(metadata ->> 'source', '') <> 'sabaibu_verified';
+set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object('source', 'sabasaba_legacy_unverified')
+where game_slug in ('sabasaba_normal', 'sabasaba_endless')
+  and coalesce(metadata ->> 'source', '') <> 'sabasaba_verified';
 
 delete from public.game_scores gs
-where gs.game_slug in ('sabaibu_normal', 'sabaibu_endless')
+where gs.game_slug in ('sabasaba_normal', 'sabasaba_endless')
   and not exists (
     select 1
     from public.score_runs sr
     where sr.normalized_name = gs.normalized_name
       and sr.game_slug = gs.game_slug
-      and sr.metadata ->> 'source' = 'sabaibu_verified'
+      and sr.metadata ->> 'source' = 'sabasaba_verified'
   );
 
-create or replace function public.start_sabaibu_run(
+create or replace function public.start_sabasaba_run(
   p_display_name text,
   p_mode text,
   p_client_run_id uuid,
@@ -72,15 +72,15 @@ begin
   v_normalized_name := public.normalize_player_name(v_display_name);
   if char_length(v_normalized_name) = 0 then raise exception 'name is empty'; end if;
   if char_length(v_normalized_name) > 20 then raise exception 'name is too long'; end if;
-  v_game_slug := case p_mode when 'normal' then 'sabaibu_normal' when 'endless' then 'sabaibu_endless' else null end;
+  v_game_slug := case p_mode when 'normal' then 'sabasaba_normal' when 'endless' then 'sabasaba_endless' else null end;
   if v_game_slug is null then raise exception 'invalid mode'; end if;
   if not exists (select 1 from public.games g where g.game_slug = v_game_slug and g.is_active) then raise exception 'game not found'; end if;
 
   select s.play_token into v_play_token
-  from private.sabaibu_run_sessions s
+  from private.sabasaba_run_sessions s
   where s.client_run_id = p_client_run_id;
   if found then
-    if not exists (select 1 from private.sabaibu_run_sessions s where s.client_run_id = p_client_run_id and s.normalized_name = v_normalized_name and s.game_slug = v_game_slug) then
+    if not exists (select 1 from private.sabasaba_run_sessions s where s.client_run_id = p_client_run_id and s.normalized_name = v_normalized_name and s.game_slug = v_game_slug) then
       raise exception 'client run id conflict';
     end if;
     select gs.play_count into v_play_count from public.game_scores gs where gs.normalized_name = v_normalized_name and gs.game_slug = v_game_slug;
@@ -89,7 +89,7 @@ begin
   end if;
 
   v_play_token := gen_random_uuid();
-  insert into private.sabaibu_run_sessions (play_token, client_run_id, game_slug, normalized_name, display_name, client_version)
+  insert into private.sabasaba_run_sessions (play_token, client_run_id, game_slug, normalized_name, display_name, client_version)
   values (v_play_token, p_client_run_id, v_game_slug, v_normalized_name, v_display_name, left(coalesce(p_client_version, ''), 120))
   on conflict (client_run_id) do nothing;
   get diagnostics v_play_count = row_count;
@@ -97,7 +97,7 @@ begin
 
   if not v_inserted then
     select s.play_token into v_play_token
-    from private.sabaibu_run_sessions s
+    from private.sabasaba_run_sessions s
     where s.client_run_id = p_client_run_id
       and s.normalized_name = v_normalized_name
       and s.game_slug = v_game_slug;
@@ -123,7 +123,7 @@ begin
 end;
 $$;
 
-create or replace function public.submit_sabaibu_run(
+create or replace function public.submit_sabasaba_run(
   p_play_token uuid,
   p_mode text,
   p_outcome text,
@@ -155,7 +155,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_run private.sabaibu_run_sessions%rowtype;
+  v_run private.sabasaba_run_sessions%rowtype;
   v_expected_slug text;
   v_server_elapsed integer;
   v_kill_points integer;
@@ -171,10 +171,10 @@ declare
   v_is_new_best boolean := false;
 begin
   if p_play_token is null then raise exception 'play token is required'; end if;
-  v_expected_slug := case p_mode when 'normal' then 'sabaibu_normal' when 'endless' then 'sabaibu_endless' else null end;
+  v_expected_slug := case p_mode when 'normal' then 'sabasaba_normal' when 'endless' then 'sabasaba_endless' else null end;
   if v_expected_slug is null then raise exception 'invalid mode'; end if;
 
-  select * into v_run from private.sabaibu_run_sessions s where s.play_token = p_play_token for update;
+  select * into v_run from private.sabasaba_run_sessions s where s.play_token = p_play_token for update;
   if not found then raise exception 'play token not found'; end if;
   if v_run.game_slug <> v_expected_slug then raise exception 'mode mismatch'; end if;
   if v_run.expires_at < clock_timestamp() then raise exception 'play token expired'; end if;
@@ -215,7 +215,7 @@ begin
     return;
   end if;
 
-  update private.sabaibu_run_sessions set
+  update private.sabasaba_run_sessions set
     status = 'submitted', finished_at = clock_timestamp(), outcome = p_outcome,
     elapsed_seconds = p_elapsed_seconds, kills = p_kills, level = p_level,
     damage_hits = p_damage_hits, damage_taken = p_damage_taken, score = v_score,
@@ -226,7 +226,7 @@ begin
   values (
     v_run.normalized_name, v_run.game_slug, v_score, left(coalesce(p_client_version, ''), 120), clock_timestamp(),
     jsonb_build_object(
-      'source', 'sabaibu_verified', 'play_token', p_play_token::text, 'outcome', p_outcome,
+      'source', 'sabasaba_verified', 'play_token', p_play_token::text, 'outcome', p_outcome,
       'elapsed_seconds', p_elapsed_seconds, 'kills', p_kills, 'level', p_level,
       'damage_hits', p_damage_hits, 'damage_taken', p_damage_taken,
       'kill_points', v_kill_points, 'time_points', v_time_points, 'level_points', v_level_points,
@@ -256,50 +256,50 @@ begin
 end;
 $$;
 
-create or replace function private.guard_sabaibu_score_runs()
+create or replace function private.guard_sabasaba_score_runs()
 returns trigger
 language plpgsql
 security invoker
 set search_path = ''
 as $$
 begin
-  if new.game_slug in ('sabaibu_normal', 'sabaibu_endless') then
-    if coalesce(new.metadata ->> 'source', '') <> 'sabaibu_verified'
+  if new.game_slug in ('sabasaba_normal', 'sabasaba_endless') then
+    if coalesce(new.metadata ->> 'source', '') <> 'sabasaba_verified'
        or coalesce(new.metadata ->> 'play_token', '') = '' then
-      raise exception 'verified sabaibu submission required';
+      raise exception 'verified sabasaba submission required';
     end if;
     if not exists (
       select 1
-      from private.sabaibu_run_sessions s
+      from private.sabasaba_run_sessions s
       where s.play_token::text = new.metadata ->> 'play_token'
         and s.status = 'submitted'
         and s.game_slug = new.game_slug
         and s.normalized_name = new.normalized_name
         and s.score = new.score
     ) then
-      raise exception 'verified sabaibu session mismatch';
+      raise exception 'verified sabasaba session mismatch';
     end if;
   end if;
   return new;
 end;
 $$;
 
-drop trigger if exists guard_sabaibu_verified_score_runs on public.score_runs;
-create trigger guard_sabaibu_verified_score_runs
+drop trigger if exists guard_sabasaba_verified_score_runs on public.score_runs;
+create trigger guard_sabasaba_verified_score_runs
 before insert on public.score_runs
-for each row execute function private.guard_sabaibu_score_runs();
+for each row execute function private.guard_sabasaba_score_runs();
 
-create unique index if not exists score_runs_sabaibu_play_token_unique
+create unique index if not exists score_runs_sabasaba_play_token_unique
   on public.score_runs ((metadata ->> 'play_token'))
-  where game_slug in ('sabaibu_normal', 'sabaibu_endless')
+  where game_slug in ('sabasaba_normal', 'sabasaba_endless')
     and metadata ->> 'play_token' is not null;
 
 update public.games
 set submission_mode = 'verified'
-where game_slug in ('sabaibu_normal', 'sabaibu_endless');
+where game_slug in ('sabasaba_normal', 'sabasaba_endless');
 
-revoke execute on function public.start_sabaibu_run(text, text, uuid, text) from public, anon, authenticated;
-revoke execute on function public.submit_sabaibu_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text) from public, anon, authenticated;
-grant execute on function public.start_sabaibu_run(text, text, uuid, text) to anon, authenticated;
-grant execute on function public.submit_sabaibu_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text) to anon, authenticated;
-revoke execute on function private.guard_sabaibu_score_runs() from public, anon, authenticated;
+revoke execute on function public.start_sabasaba_run(text, text, uuid, text) from public, anon, authenticated;
+revoke execute on function public.submit_sabasaba_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text) from public, anon, authenticated;
+grant execute on function public.start_sabasaba_run(text, text, uuid, text) to anon, authenticated;
+grant execute on function public.submit_sabasaba_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text) to anon, authenticated;
+revoke execute on function private.guard_sabasaba_score_runs() from public, anon, authenticated;

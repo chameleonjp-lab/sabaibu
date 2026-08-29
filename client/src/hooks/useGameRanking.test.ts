@@ -18,8 +18,8 @@ describe("verified ranking contract", () => {
   });
 
   it("keeps Normal and Endless in separate leaderboards", () => {
-    expect(rankingSlugForMode("normal")).toBe("sabaibu_normal");
-    expect(rankingSlugForMode("endless")).toBe("sabaibu_endless");
+    expect(rankingSlugForMode("normal")).toBe("sabasaba_normal");
+    expect(rankingSlugForMode("endless")).toBe("sabasaba_endless");
   });
 
   it("normalizes display names before starting a server run", () => {
