@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RANKING_ENABLED, canSubmitRankingResult, createClientRunId, normalizeRankingName, rankingSlugForMode } from "@/hooks/useGameRanking";
+import { RANKING_ENABLED, RANKING_LIMIT, canSubmitRankingResult, createClientRunId, normalizeRankingName, rankingSlugForMode } from "@/hooks/useGameRanking";
 
 describe("verified ranking contract", () => {
   it("keeps ranking disabled until server-authoritative validation is ready", () => {
     expect(RANKING_ENABLED).toBe(false);
+  });
+
+  it("requests the top ten records when ranking is enabled", () => {
+    expect(RANKING_LIMIT).toBe(10);
   });
 
   afterEach(() => vi.unstubAllGlobals());
