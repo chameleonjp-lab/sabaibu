@@ -6,6 +6,8 @@ import { GameWorld } from "./GameWorld";
 import type { GameSnapshot } from "./types";
 import {
   ENDLESS_MAX_ENEMIES,
+  EARLY_SCOUT_MIN_HP,
+  EARLY_STRIKER_MIN_HP,
   MAX_TRACKED_BOSSES_DEFEATED,
   MAX_TRACKED_COMBAT_DAMAGE,
   MAX_TRACKED_COMBO,
@@ -241,6 +243,92 @@ describe("GameWorld Normal upgrade and boss reward policy", () => {
     runtime.updateEnemies(1 / 60);
 
     expect(runtime.health).toBe(98);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("does not miss ring contact when an enemy enters or crosses the ring in one update", () => {
+    stubWindow();
+    const { engine, scene, world } = createNormalWorld(() => undefined);
+    const runtime = world as unknown as {
+      health: number;
+      damageTimer: number;
+      enemies: Array<{ enteringContainment: boolean; mesh: { position: Vector3 } }>;
+      spawnEnemy: (kind?: "scout", highVariant?: string, allowHighVariant?: boolean) => void;
+      updateEnemies: (delta: number) => void;
+    };
+
+    runtime.spawnEnemy("scout", undefined, false);
+    const enemy = runtime.enemies[0];
+    enemy.mesh.position.set(0.8, 0.8, 0);
+    runtime.damageTimer = 0;
+    runtime.updateEnemies(1);
+
+    expect(enemy.enteringContainment).toBe(false);
+    expect(runtime.health).toBe(98);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("keeps ring contact active while a Striker is preparing an attack", () => {
+    stubWindow();
+    const { engine, scene, world } = createNormalWorld(() => undefined);
+    const runtime = world as unknown as {
+      health: number;
+      damageTimer: number;
+      enemies: Array<{ enteringContainment: boolean; strikerAction: "none" | "windup" | "dash"; strikerTimer: number; mesh: { position: Vector3 } }>;
+      spawnEnemy: (kind?: "striker", highVariant?: string, allowHighVariant?: boolean) => void;
+      updateEnemies: (delta: number) => void;
+    };
+
+    runtime.spawnEnemy("striker", undefined, false);
+    const enemy = runtime.enemies[0];
+    enemy.enteringContainment = false;
+    enemy.strikerAction = "windup";
+    enemy.strikerTimer = 1;
+    enemy.mesh.position.set(0, 0.8, 0);
+    runtime.damageTimer = 0;
+    runtime.updateEnemies(1 / 60);
+
+    expect(runtime.health).toBe(98);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("requires two starting Rail hits for opening Scout and Striker enemies", () => {
+    stubWindow();
+    const { engine, scene, world } = createNormalWorld(() => undefined);
+    type TestEnemy = { hp: number; maxHp: number; enteringContainment: boolean; mesh: { position: Vector3 } };
+    const runtime = world as unknown as {
+      damage: number;
+      enemies: TestEnemy[];
+      spawnEnemy: (kind: "scout" | "striker", highVariant?: string, allowHighVariant?: boolean) => void;
+      applyDamage: (enemy: TestEnemy, damage: number, source: "rail") => void;
+    };
+
+    runtime.spawnEnemy("scout", undefined, false);
+    runtime.spawnEnemy("striker", undefined, false);
+    const scout = runtime.enemies[0];
+    const striker = runtime.enemies[1];
+    scout.enteringContainment = false;
+    striker.enteringContainment = false;
+    scout.mesh.position.set(0, 0.8, 0);
+    striker.mesh.position.set(2, 0.8, 0);
+
+    expect(scout.hp).toBe(EARLY_SCOUT_MIN_HP);
+    expect(striker.hp).toBe(EARLY_STRIKER_MIN_HP);
+    for (const enemy of [scout, striker]) {
+      runtime.applyDamage(enemy, runtime.damage, "rail");
+      expect(enemy.hp).toBeGreaterThan(0);
+      runtime.applyDamage(enemy, runtime.damage, "rail");
+      expect(enemy.hp).toBeLessThanOrEqual(0);
+    }
 
     world.dispose();
     scene.dispose();
