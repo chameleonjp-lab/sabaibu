@@ -512,6 +512,13 @@ button { font: inherit; }
 .kill-milestone-particle:nth-child(3n) { color: #9efff5; text-shadow: 0 0 5px #49e8e2, 0 0 14px rgba(73, 232, 226, .8), 0 2px 2px rgba(0, 0, 0, .8); }
 .kill-milestone-particle:nth-child(4n) { color: #ffb8ec; text-shadow: 0 0 5px #ff65cf, 0 0 14px rgba(255, 101, 207, .76), 0 2px 2px rgba(0, 0, 0, .8); }
 .scene-loading { position: absolute; z-index: 30; inset: auto 50% 50%; transform: translate(50%, 50%); padding: 11px 13px; color: #a9fff1; border: 1px solid rgba(117, 239, 236, .38); background: rgba(3, 14, 15, .9); font: 700 9px / 1 "IBM Plex Mono", monospace; letter-spacing: .12em; white-space: nowrap; }
+.run-countdown-layer { position: absolute; z-index: 36; inset: 0; display: grid; place-items: center; padding: 24px; pointer-events: auto; touch-action: none; background: rgba(2, 6, 7, .34); backdrop-filter: blur(2px); animation: modal-in .2s cubic-bezier(.23,1,.32,1); }
+.run-countdown-console { width: min(310px, calc(100% - 34px)); padding: 24px 24px 20px; text-align: center; border: 1px solid rgba(255, 173, 38, .62); background: linear-gradient(135deg, rgba(16, 22, 21, .92), rgba(5, 10, 11, .9)); box-shadow: 0 18px 70px rgba(0, 0, 0, .52), inset 0 0 38px rgba(255, 173, 38, .08); }
+.run-countdown-console .modal-eyebrow { margin-bottom: 15px; }
+.run-countdown-console strong { display: block; color: #fff4de; font: 700 clamp(72px, 18vw, 112px) / .86 "Chakra Petch", sans-serif; letter-spacing: -.06em; text-shadow: 0 0 22px rgba(255, 173, 38, .42); }
+.run-countdown-console span { display: block; margin-top: 15px; color: rgba(214, 242, 231, .76); font: 600 9px / 1.4 "IBM Plex Mono", monospace; letter-spacing: .14em; }
+.run-countdown-progress { display: block; height: 4px; margin-top: 18px; overflow: hidden; background: rgba(3, 9, 10, .8); border: 1px solid rgba(117, 239, 236, .28); }
+.run-countdown-progress i { display: block; height: 100%; background: linear-gradient(90deg, #ffad26, #afff6d); box-shadow: 0 0 12px rgba(175, 255, 109, .66); transition: width .16s linear; }
 .scene-error { color: #ffad98; font-size: 11px; line-height: 1.6; }
 .scene-error-overlay { position: absolute; z-index: 40; inset: 50% auto auto 50%; width: min(420px, calc(100% - 30px)); transform: translate(-50%, -50%); padding: 20px; border: 1px solid rgba(255, 92, 67, .6); background: rgba(24, 8, 8, .96); }
 .scene-error-overlay button { min-height: 44px; padding: 9px 12px; color: #180b05; background: #ffad26; border: 0; cursor: pointer; font-weight: 700; }
