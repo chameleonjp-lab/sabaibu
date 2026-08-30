@@ -61,6 +61,26 @@ export interface GameSceneOptions {
 
 type ViewportCameraProfile = { fov: number; beta: number; radiusScale: number };
 
+const preloadSceneAsset = (src: string): Promise<void> => {
+  if (typeof Image === "undefined") return Promise.resolve();
+  return new Promise((resolve) => {
+    const image = new Image();
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    image.onload = finish;
+    image.onerror = finish;
+    image.src = src;
+    if (image.complete) finish();
+    if (typeof window !== "undefined") window.setTimeout(finish, 2500);
+  });
+};
+
+const preloadSceneAssets = () => Promise.all(Object.values(GAME_ASSETS).map(preloadSceneAsset)).then(() => undefined);
+
 const getViewportCameraProfile = (width: number, height: number): ViewportCameraProfile => {
   const aspect = width / Math.max(1, height);
   const compactViewport = Math.min(width, height) < 650;
@@ -73,6 +93,7 @@ const getViewportCameraProfile = (width: number, height: number): ViewportCamera
 };
 
 export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement, options: GameSceneOptions): Promise<GameHandle> {
+  await preloadSceneAssets();
   const scene = new Scene(engine);
   scene.clearColor = new Color4(0.012, 0.017, 0.021, 1);
   scene.ambientColor = new Color3(0.12, 0.11, 0.08);
@@ -228,6 +249,19 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     camera.target.copyFrom(framing.playerPosition);
     // Camera zoom is presentation-only. Targeting, drop reach, and spawn
     // eligibility remain at the same simulation radius on every viewport.
+  });
+
+  let readyTimer: number | null = null;
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (readyTimer !== null && typeof window !== "undefined") window.clearTimeout(readyTimer);
+      resolve();
+    };
+    scene.executeWhenReady(finish);
+    if (!settled && typeof window !== "undefined") readyTimer = window.setTimeout(finish, 2500);
   });
 
   return {
