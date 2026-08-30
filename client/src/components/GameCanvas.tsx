@@ -32,7 +32,7 @@ const BEST_SCORE_STORAGE_KEY = "neon-siege-best-score-v1";
 const TUTORIAL_STORAGE_KEY = "neon-siege-tutorial-complete-v1";
 const RUN_COUNTDOWN_SECONDS = 3;
 const RUN_COUNTDOWN_DURATION_MS = RUN_COUNTDOWN_SECONDS * 1000;
-const EXPERIMENT_LAB_URL = "https://chameleonjp.codeberg.page/chameleonjp_lab/";
+const EXPERIMENT_LAB_URL = "https://chameleonjp-lab.github.io/chameleonjp_lab/";
 const DEFAULT_PLAYER_SETTINGS: PlayerSettings = { stickOpacity: 0.56, cameraZoom: 1 };
 
 const INITIAL_SNAPSHOT: GameSnapshot = {
