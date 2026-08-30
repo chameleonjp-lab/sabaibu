@@ -191,6 +191,7 @@ export default function GameCanvas() {
   const nameInputRef = useRef<HTMLInputElement>(null);
   const weaponLibraryCloseRef = useRef<HTMLButtonElement>(null);
   const weaponDetailCloseRef = useRef<HTMLButtonElement>(null);
+  const rulesCloseRef = useRef<HTMLButtonElement>(null);
   const startedRef = useRef(false);
   const handleRef = useRef<GameHandle | null>(null);
   const joystickPointerIdRef = useRef<number | null>(null);
@@ -260,6 +261,7 @@ export default function GameCanvas() {
   const [settingsOpen, setSettingsOpen] = useState(settingsPreview);
   const [weaponLibraryOpen, setWeaponLibraryOpen] = useState(false);
   const [weaponDetailId, setWeaponDetailId] = useState<UpgradeId | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [pauseOpen, setPauseOpen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [tutorialComplete, setTutorialComplete] = useState(loadTutorialComplete);
@@ -367,6 +369,26 @@ export default function GameCanvas() {
     }
     restoreFocus();
   }, [pauseOpen, restoreFocus, setPausedCommand, tutorialOpen]);
+
+  const closeRules = useCallback(() => {
+    setRulesOpen(false);
+    restoreFocus();
+  }, [restoreFocus]);
+
+  useEffect(() => {
+    if (!rulesOpen) return;
+    const focusFrame = window.requestAnimationFrame(() => rulesCloseRef.current?.focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeRules();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [closeRules, rulesOpen]);
 
   const completeTutorial = useCallback(() => {
     setTutorialComplete(true);
@@ -1025,27 +1047,19 @@ export default function GameCanvas() {
           <p className="modal-eyebrow">封鎖区域 // セクター07</p>
           <h1 id="pre-run-title">サバサバ</h1>
           <p className="pre-run-purpose">自動射撃で敵の波を切り抜け、経験値を集め、装備を進化させる見下ろし型サバイバル。</p>
-           <section className="pre-run-rules" data-testid="home-rules" aria-labelledby="home-rules-title">
-             <header className="pre-run-rules-header"><div><span>MISSION BRIEF // 出撃前確認</span><h2 id="home-rules-title">ルール説明</h2></div><small>先に確認</small></header>
-             <p className="pre-run-rules-lead">移動しながら自動射撃。敵を倒して経験値を集め、レベルアップで戦い方を組み立てます。</p>
-             <div className="pre-run-rule-grid">
-               <article className={`pre-run-rule-card ${selectedMode === "normal" ? "selected" : ""}`} data-mode-rule="normal"><div className="pre-run-rule-card-heading"><span>01</span><h3>通常</h3></div><ul><li>10分の任務。3:00・6:00・9:15にボスが出現します。</li><li>最終ボスを倒せばクリア。時間内に倒せなければ失敗です。</li></ul></article>
-               <article className={`pre-run-rule-card ${selectedMode === "endless" ? "selected" : ""}`} data-mode-rule="endless"><div className="pre-run-rule-card-heading"><span>02</span><h3>無限</h3></div><ul><li>ゲームオーバーまで生存。撃破数・生存時間・レベルで得点を伸ばし、被弾は減点されます。</li><li>Lv.5から5レベルごとにボス。撃破後は攻撃力+4%か、最大HP+5（HPも5回復）を選びます。</li></ul></article>
-             </div>
-             <div className="pre-run-rules-common"><span>共通ルール</span><ul className="pre-run-rules-list"><li><b>移動</b><span>画面の任意位置をタップしてドラッグ。PCはW・A・S・Dまたは矢印キー。</span></li><li><b>回避</b><span>DODGEボタン（PCはSpace）で回避。クールダウンは120秒です。</span></li><li><b>強化</b><span>レベルアップ時に戦闘が止まり、3つの候補から1つを選びます。</span></li><li><b>装備</b><span>攻撃6枠（初期レール含む）・補助4枠。特定の攻撃をTier 3まで揃えると自動進化します。</span></li></ul></div>
-           </section>
           <form className="pre-run-form" noValidate onSubmit={startRun}>
             <label className="name-field"><span>プレイヤー名</span><input ref={nameInputRef} data-testid="player-name" autoComplete="nickname" maxLength={18} value={playerName} onChange={(event) => { setPlayerName(event.target.value); if (nameError) setNameError(""); }} placeholder="プレイヤー01" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "name-help name-error" : "name-help"} /><small id="name-help">次回の出撃にも保存されます。</small></label>
             {nameError && <div id="name-error" className="name-entry-alert" role="alert" aria-live="assertive"><span aria-hidden="true">!</span><strong>{nameError}</strong></div>}
             <fieldset className="mode-picker"><legend>モードを選択</legend><div role="radiogroup" aria-label="ゲームモード"><button data-testid="mode-normal" type="button" role="radio" aria-checked={selectedMode === "normal"} className={selectedMode === "normal" ? "selected" : ""} onClick={() => setSelectedMode("normal")}><b>通常</b><small>10分以内に最終ボスを撃破。</small></button><button data-testid="mode-endless" type="button" role="radio" aria-checked={selectedMode === "endless"} className={selectedMode === "endless" ? "selected" : ""} onClick={() => setSelectedMode("endless")}><b>無限</b><small>終わりなき波。得点を伸ばす。</small></button></div></fieldset>
+             <button className="pre-run-rules-trigger" data-testid="home-rules-trigger" type="button" onClick={() => { rememberFocus(); setRulesOpen(true); }}><span>ルール説明</span><small>通常・無限の遊び方と操作を確認</small><b>確認</b></button>
             <button className="start-run-button" data-testid="start-run" type="submit">出撃開始 <span>開始</span></button>
           </form>
           <button className="weapon-library-trigger" data-testid="weapon-list" type="button" onClick={() => { rememberFocus(); setWeaponDetailId(null); setWeaponLibraryOpen(true); }}><span>武器一覧</span><small>効果・レベル・進化条件を見る</small><b>開く</b></button>
-          <a className="experiment-lab-link" data-testid="experiment-lab-home" href="?debug"><span>実験場</span><small>戦闘・当たり判定・負荷の確認シナリオ</small><b>開く</b></a>
           <ShareButton className="home-share-action" label="ゲームをシェア" testId="share-home" title="サバサバ" text="【サバサバ】自動射撃で敵の波を切り抜ける、見下ろし型サバイバルゲーム。" />
           <details className="pre-run-settings" open><summary>出撃前の設定</summary><p>端末に保存されます。出撃中は一時停止画面から変更できます。</p>{renderSettingsFields(true)}</details>
           {sceneError && <p className="scene-error" role="alert">{sceneError}</p>}
         </section>
+         {rulesOpen && <div className="pre-run-rules-layer" data-testid="home-rules-modal" onClick={(event) => { if (event.target === event.currentTarget) closeRules(); }}><section className="pre-run-rules pre-run-rules-modal" role="dialog" aria-modal="true" aria-labelledby="home-rules-modal-title" data-dialog-root="true" onClick={(event) => event.stopPropagation()}><header className="pre-run-rules-header"><div><span>MISSION BRIEF // 出撃前確認</span><h2 id="home-rules-modal-title">ルール説明</h2></div><button ref={rulesCloseRef} type="button" onClick={closeRules}>閉じる</button></header><p className="pre-run-rules-lead">移動しながら自動射撃。敵を倒して経験値を集め、レベルアップで戦い方を組み立てます。</p><div className="pre-run-rule-grid"><article className={`pre-run-rule-card ${selectedMode === "normal" ? "selected" : ""}`} data-mode-rule="normal"><div className="pre-run-rule-card-heading"><span>01</span><h3>通常</h3></div><ul><li>10分の任務。3:00・6:00・9:15にボスが出現します。</li><li>最終ボスを倒せばクリア。時間内に倒せなければ失敗です。</li></ul></article><article className={`pre-run-rule-card ${selectedMode === "endless" ? "selected" : ""}`} data-mode-rule="endless"><div className="pre-run-rule-card-heading"><span>02</span><h3>無限</h3></div><ul><li>ゲームオーバーまで生存。撃破数・生存時間・レベルで得点を伸ばし、被弾は減点されます。</li><li>Lv.5から5レベルごとにボス。撃破後は攻撃力+4%か、最大HP+5（HPも5回復）を選びます。</li></ul></article></div><div className="pre-run-rules-common"><span>共通ルール</span><ul className="pre-run-rules-list"><li><b>移動</b><span>画面の任意位置をタップしてドラッグ。PCはW・A・S・Dまたは矢印キー。</span></li><li><b>回避</b><span>DODGEボタン（PCはSpace）で回避。クールダウンは120秒です。</span></li><li><b>強化</b><span>レベルアップ時に戦闘が止まり、3つの候補から1つを選びます。</span></li><li><b>装備</b><span>攻撃6枠（初期レール含む）・補助4枠。特定の攻撃をTier 3まで揃えると自動進化します。</span></li></ul></div></section></div>}
         {weaponLibraryModal}
       </main>
     );
