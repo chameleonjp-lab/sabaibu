@@ -339,6 +339,23 @@ button { font: inherit; }
 .pre-run-rules-list li { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; color: rgba(220, 243, 241, .68); font-size: 10px; line-height: 1.55; }
 .pre-run-rules-list b { color: #a9fff1; font: 700 8px / 1.55 "IBM Plex Mono", monospace; letter-spacing: .08em; }
 
+@media (max-width: 560px) {
+  .pre-run-rules { margin-bottom: 18px; padding: 12px; }
+  .pre-run-rules-header h2 { font-size: 20px; }
+  .pre-run-rule-grid { grid-template-columns: 1fr; }
+  .pre-run-rule-card { padding: 10px; }
+  .pre-run-rules-list li { grid-template-columns: 38px minmax(0, 1fr); gap: 6px; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .pre-run-rules { margin-bottom: 14px; padding: 11px 13px; }
+  .pre-run-rules-header { margin-bottom: 7px; padding-bottom: 7px; }
+  .pre-run-rules-lead { margin-bottom: 8px; font-size: 10px; }
+  .pre-run-rule-card { padding: 8px 10px; }
+  .pre-run-rule-card ul { margin-top: 5px; line-height: 1.5; }
+  .pre-run-rules-common { margin-top: 8px; padding-top: 8px; }
+}
+
 .pre-run-form { display: grid; gap: 19px; }
 .name-field { display: grid; gap: 7px; }
 .name-field > span, .mode-picker legend { color: rgba(255, 220, 159, .8); font: 700 10px / 1 "IBM Plex Mono", monospace; letter-spacing: .14em; }
