@@ -319,6 +319,26 @@ button { font: inherit; }
 .pre-run-panel > h1 { margin: 0; color: #fff5e2; font: 700 clamp(32px, 7vw, 64px) / .86 "Chakra Petch", sans-serif; letter-spacing: .035em; }
 .pre-run-panel > h1 span { color: #ffad26; }
 .pre-run-purpose { max-width: 52ch; margin: 20px 0 24px; color: rgba(246, 238, 222, .78); font-size: 14px; line-height: 1.8; }
+
+.pre-run-rules { margin: 0 0 24px; padding: 15px; border: 1px solid rgba(117, 239, 236, .28); background: linear-gradient(145deg, rgba(8, 26, 28, .68), rgba(5, 12, 13, .78)); }
+.pre-run-rules-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid rgba(117, 239, 236, .18); }
+.pre-run-rules-header span, .pre-run-rules-common > span { color: rgba(169, 243, 240, .72); font: 700 8px / 1 "IBM Plex Mono", monospace; letter-spacing: .14em; }
+.pre-run-rules-header h2 { margin: 5px 0 0; color: #fff5e2; font: 700 24px / .95 "Chakra Petch", sans-serif; letter-spacing: .06em; }
+.pre-run-rules-header > small { color: #ffca6c; font: 700 8px / 1 "IBM Plex Mono", monospace; letter-spacing: .12em; white-space: nowrap; }
+.pre-run-rules-lead { margin: 0 0 12px; color: rgba(246, 238, 222, .76); font-size: 11px; line-height: 1.65; }
+.pre-run-rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.pre-run-rule-card { padding: 11px 12px; border: 1px solid rgba(216, 231, 218, .22); background: rgba(6, 18, 19, .68); }
+.pre-run-rule-card.selected { border-color: rgba(255, 173, 38, .72); box-shadow: inset 0 0 18px rgba(255, 173, 38, .08); }
+.pre-run-rule-card-heading { display: flex; align-items: baseline; gap: 8px; }
+.pre-run-rule-card-heading > span { color: rgba(169, 255, 241, .55); font: 600 8px / 1 "IBM Plex Mono", monospace; letter-spacing: .1em; }
+.pre-run-rule-card-heading h3 { margin: 0; color: #ffca6c; font: 700 16px / 1 "Chakra Petch", sans-serif; letter-spacing: .08em; }
+.pre-run-rule-card ul { margin: 8px 0 0; padding-left: 17px; color: rgba(243, 255, 251, .72); font-size: 10px; line-height: 1.65; }
+.pre-run-rule-card li + li { margin-top: 4px; }
+.pre-run-rules-common { margin-top: 12px; padding-top: 11px; border-top: 1px solid rgba(117, 239, 236, .16); }
+.pre-run-rules-list { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.pre-run-rules-list li { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; color: rgba(220, 243, 241, .68); font-size: 10px; line-height: 1.55; }
+.pre-run-rules-list b { color: #a9fff1; font: 700 8px / 1.55 "IBM Plex Mono", monospace; letter-spacing: .08em; }
+
 .pre-run-form { display: grid; gap: 19px; }
 .name-field { display: grid; gap: 7px; }
 .name-field > span, .mode-picker legend { color: rgba(255, 220, 159, .8); font: 700 10px / 1 "IBM Plex Mono", monospace; letter-spacing: .14em; }
