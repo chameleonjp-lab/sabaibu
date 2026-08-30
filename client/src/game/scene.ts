@@ -25,6 +25,7 @@ export interface GameHandle {
   scene: Scene;
   setTouchDirection: (x: number, z: number) => void;
   setCameraZoomMultiplier: (multiplier: number) => void;
+  setPreparing: (preparing: boolean) => void;
   setPaused: (paused: boolean) => void;
   retire: () => void;
   requestDodge: () => void;
@@ -271,6 +272,10 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     setTouchDirection: (x, z) => world.setTouchDirection(x, z),
     setCameraZoomMultiplier: (multiplier) => {
       cameraZoomMultiplier = Math.max(0.82, Math.min(1.22, multiplier));
+    },
+    setPreparing: (preparing) => {
+      if (preparing) clearSimulationDebt();
+      world.setPreparing(preparing);
     },
     setPaused: (paused) => {
       if (paused) clearSimulationDebt();

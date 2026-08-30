@@ -223,6 +223,7 @@ export class GameWorld {
   private cameraRight = new Vector3(1, 0, 0);
   private lastMoveDirection = new Vector3(0, 0, 1);
   private phase: GamePhase = "playing";
+  private preparing = false;
   private outcome: GameOutcome = "running";
   private health = 100;
   private maxHealth = 100;
@@ -509,6 +510,7 @@ export class GameWorld {
 
   update(delta: number) {
     if (this.disposed) return;
+    if (this.preparing) return;
     if (this.phase !== "playing") return;
     if (this.tryAdvanceLevel()) return;
     const safeDelta = Number.isFinite(delta) ? Math.min(Math.max(delta, 0), 0.05) : 0;
@@ -566,7 +568,15 @@ export class GameWorld {
   }
 
   isSimulationRunning() {
-    return !this.disposed && this.phase === "playing";
+    return !this.disposed && !this.preparing && this.phase === "playing";
+  }
+
+  setPreparing(preparing: boolean) {
+    this.preparing = preparing;
+    if (preparing) {
+      this.touchDirection.setAll(0);
+      this.keys.clear();
+    }
   }
 
   setPaused(paused: boolean) {
@@ -757,6 +767,7 @@ export class GameWorld {
     this.keys.clear();
     this.touchDirection.setAll(0);
     this.lastMoveDirection.set(0, 0, 1);
+    this.preparing = false;
     this.phase = "playing";
     this.outcome = "running";
     this.health = 100;
