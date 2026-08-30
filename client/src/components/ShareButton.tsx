@@ -38,7 +38,8 @@ export default function ShareButton({ title, text, label, testId, className = ""
 
   const share = async () => {
     const url = getShareUrl();
-    const shareData = { title, text, url };
+    const shareText = `${text.trim()}\n${url}`;
+    const shareData = { title, text: shareText };
 
     if (typeof navigator.share === "function") {
       try {
@@ -54,7 +55,7 @@ export default function ShareButton({ title, text, label, testId, className = ""
     }
 
     try {
-      await navigator.clipboard.writeText(`${text}\n${url}`);
+      await navigator.clipboard.writeText(shareText);
       showStatus("シェア文をコピーしました。");
     } catch {
       showStatus("シェアできませんでした。");
