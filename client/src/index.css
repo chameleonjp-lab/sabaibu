@@ -746,3 +746,13 @@ button { font: inherit; }
 @media (max-width: 560px) {
   .pre-run-rules-trigger { grid-column: 1; }
 }
+
+.pre-run-device-guide { margin-top: 12px; padding-top: 11px; border-top: 1px solid rgba(117, 239, 236, .16); }
+.pre-run-device-guide > header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.pre-run-device-guide > header span { color: rgba(169, 243, 240, .72); font: 700 8px / 1 "IBM Plex Mono", monospace; letter-spacing: .14em; }
+.pre-run-device-guide > header b { color: #ffca6c; font: 700 11px / 1 "Chakra Petch", sans-serif; letter-spacing: .08em; }
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .pre-run-device-guide { margin-top: 8px; padding-top: 8px; }
+  .pre-run-device-guide > header { margin-bottom: 5px; }
+}
