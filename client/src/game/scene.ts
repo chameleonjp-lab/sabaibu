@@ -66,16 +66,18 @@ const preloadSceneAsset = (src: string): Promise<void> => {
   return new Promise((resolve) => {
     const image = new Image();
     let settled = false;
+    let timeoutId: number | null = null;
     const finish = () => {
       if (settled) return;
       settled = true;
+      if (timeoutId !== null && typeof window !== "undefined") window.clearTimeout(timeoutId);
       resolve();
     };
     image.onload = finish;
     image.onerror = finish;
     image.src = src;
     if (image.complete) finish();
-    if (typeof window !== "undefined") window.setTimeout(finish, 2500);
+    if (!settled && typeof window !== "undefined") timeoutId = window.setTimeout(finish, 2500);
   });
 };
 
