@@ -1,8 +1,8 @@
--- Harden Sabaibu ranking validation before the client is ever allowed to enable ranking.
+-- Harden Sabasaba ranking validation before the client is ever allowed to enable ranking.
 -- This migration closes time rollback, future-time, client-version replacement, and
 -- one-time-token replay gaps. It does not make client-reported combat statistics
 -- authoritative; that requires a server-side event ledger or server-run simulation.
-create or replace function public.submit_sabaibu_run(
+create or replace function public.submit_sabasaba_run(
   p_play_token uuid,
   p_mode text,
   p_outcome text,
@@ -34,7 +34,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_run private.sabaibu_run_sessions%rowtype;
+  v_run private.sabasaba_run_sessions%rowtype;
   v_expected_slug text;
   v_server_elapsed integer;
   v_kill_points integer;
@@ -54,8 +54,8 @@ begin
   end if;
 
   v_expected_slug := case p_mode
-    when 'normal' then 'sabaibu_normal'
-    when 'endless' then 'sabaibu_endless'
+    when 'normal' then 'sabasaba_normal'
+    when 'endless' then 'sabasaba_endless'
     else null
   end;
   if v_expected_slug is null then
@@ -64,7 +64,7 @@ begin
 
   select *
   into v_run
-  from private.sabaibu_run_sessions s
+  from private.sabasaba_run_sessions s
   where s.play_token = p_play_token
   for update;
 
@@ -180,9 +180,9 @@ begin
     return;
   end if;
 
-  perform set_config('app.sabaibu_verified_run', p_play_token::text, true);
+  perform set_config('app.sabasaba_verified_run', p_play_token::text, true);
 
-  update private.sabaibu_run_sessions
+  update private.sabasaba_run_sessions
   set status = 'submitted',
       finished_at = clock_timestamp(),
       outcome = p_outcome,
@@ -209,7 +209,7 @@ begin
     v_run.client_version,
     clock_timestamp(),
     jsonb_build_object(
-      'source', 'sabaibu_verified',
+      'source', 'sabasaba_verified',
       'play_token', p_play_token::text,
       'outcome', p_outcome,
       'elapsed_seconds', p_elapsed_seconds,
@@ -276,7 +276,7 @@ $$;
 
 -- Ranking is intentionally disabled for this phase. Re-granting these functions
 -- must be a separate, reviewed migration after authoritative validation exists.
-revoke execute on function public.start_sabaibu_run(text, text, uuid, text)
+revoke execute on function public.start_sabasaba_run(text, text, uuid, text)
   from public, anon, authenticated;
-revoke execute on function public.submit_sabaibu_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text)
+revoke execute on function public.submit_sabasaba_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text)
   from public, anon, authenticated;

@@ -64,7 +64,7 @@ jobs:
             echo "Found an unresolved Vite placeholder in the Pages HTML."
             exit 1
           fi
-          grep -Eq '(src|href)="/sabaibu/assets/' dist/public/index.html
+          grep -Eq '(src|href)="/sabasaba/assets/' dist/public/index.html
           for asset in \
             neon-siege-floor.svg \
             neon-siege-drone-panel.svg \

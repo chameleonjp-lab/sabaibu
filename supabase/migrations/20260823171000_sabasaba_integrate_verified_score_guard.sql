@@ -1,4 +1,4 @@
--- Extend the shared verified-score guard so Sabaibu uses its own one-time run ledger
+-- Extend the shared verified-score guard so Sabasaba uses its own one-time run ledger
 -- without weakening the existing Tomatoku verified-run protection.
 create or replace function private.guard_verified_score_write()
 returns trigger
@@ -11,37 +11,37 @@ declare
   v_run_token_text text;
   v_run_token uuid;
   v_run private.tomatoku_runs_v1%rowtype;
-  v_sabaibu_run private.sabaibu_run_sessions%rowtype;
+  v_sabasaba_run private.sabasaba_run_sessions%rowtype;
 begin
   v_game_slug := case when tg_op = 'DELETE' then old.game_slug else new.game_slug end;
 
-  if v_game_slug in ('sabaibu_normal', 'sabaibu_endless') then
-    v_run_token_text := nullif(current_setting('app.sabaibu_verified_run', true), '');
+  if v_game_slug in ('sabasaba_normal', 'sabasaba_endless') then
+    v_run_token_text := nullif(current_setting('app.sabasaba_verified_run', true), '');
     begin
       v_run_token := v_run_token_text::uuid;
     exception when others then
-      raise exception 'verified sabaibu score write requires a valid run';
+      raise exception 'verified sabasaba score write requires a valid run';
     end;
 
-    select * into v_sabaibu_run
-    from private.sabaibu_run_sessions s
+    select * into v_sabasaba_run
+    from private.sabasaba_run_sessions s
     where s.play_token = v_run_token
       and s.game_slug = v_game_slug
       and s.status in ('started', 'submitted');
     if not found then
-      raise exception 'verified sabaibu score write requires an active run';
+      raise exception 'verified sabasaba score write requires an active run';
     end if;
-    if new.normalized_name is distinct from v_sabaibu_run.normalized_name then
-      raise exception 'verified sabaibu score write does not match the active run';
+    if new.normalized_name is distinct from v_sabasaba_run.normalized_name then
+      raise exception 'verified sabasaba score write does not match the active run';
     end if;
     if tg_table_name = 'score_runs' then
-      if v_sabaibu_run.status <> 'submitted'
-        or new.score is distinct from v_sabaibu_run.score
-        or new.client_version is distinct from v_sabaibu_run.client_version
-        or new.metadata ->> 'source' is distinct from 'sabaibu_verified'
-        or new.metadata ->> 'play_token' is distinct from v_sabaibu_run.play_token::text
+      if v_sabasaba_run.status <> 'submitted'
+        or new.score is distinct from v_sabasaba_run.score
+        or new.client_version is distinct from v_sabasaba_run.client_version
+        or new.metadata ->> 'source' is distinct from 'sabasaba_verified'
+        or new.metadata ->> 'play_token' is distinct from v_sabasaba_run.play_token::text
       then
-        raise exception 'verified sabaibu score write values do not match the active run';
+        raise exception 'verified sabasaba score write values do not match the active run';
       end if;
     end if;
     if tg_op = 'DELETE' then return old; end if;
@@ -94,7 +94,7 @@ begin
 end;
 $$;
 
-create or replace function public.start_sabaibu_run(
+create or replace function public.start_sabasaba_run(
   p_display_name text,
   p_mode text,
   p_client_run_id uuid,
@@ -118,19 +118,19 @@ begin
   v_normalized_name := public.normalize_player_name(v_display_name);
   if char_length(v_normalized_name) = 0 then raise exception 'name is empty'; end if;
   if char_length(v_normalized_name) > 20 then raise exception 'name is too long'; end if;
-  v_game_slug := case p_mode when 'normal' then 'sabaibu_normal' when 'endless' then 'sabaibu_endless' else null end;
+  v_game_slug := case p_mode when 'normal' then 'sabasaba_normal' when 'endless' then 'sabasaba_endless' else null end;
   if v_game_slug is null then raise exception 'invalid mode'; end if;
   if not exists (select 1 from public.games g where g.game_slug = v_game_slug and g.is_active) then
     raise exception 'game not found';
   end if;
 
   select s.play_token into v_play_token
-  from private.sabaibu_run_sessions s
+  from private.sabasaba_run_sessions s
   where s.client_run_id = p_client_run_id;
   if found then
     if not exists (
       select 1
-      from private.sabaibu_run_sessions s
+      from private.sabasaba_run_sessions s
       where s.client_run_id = p_client_run_id
         and s.normalized_name = v_normalized_name
         and s.game_slug = v_game_slug
@@ -145,7 +145,7 @@ begin
   end if;
 
   v_play_token := gen_random_uuid();
-  insert into private.sabaibu_run_sessions (
+  insert into private.sabasaba_run_sessions (
     play_token, client_run_id, game_slug, normalized_name, display_name, client_version
   ) values (
     v_play_token, p_client_run_id, v_game_slug, v_normalized_name, v_display_name,
@@ -157,7 +157,7 @@ begin
 
   if not v_inserted then
     select s.play_token into v_play_token
-    from private.sabaibu_run_sessions s
+    from private.sabasaba_run_sessions s
     where s.client_run_id = p_client_run_id
       and s.normalized_name = v_normalized_name
       and s.game_slug = v_game_slug;
@@ -175,7 +175,7 @@ begin
     display_name = excluded.display_name,
     last_played_at = excluded.last_played_at;
 
-  perform set_config('app.sabaibu_verified_run', v_play_token::text, true);
+  perform set_config('app.sabasaba_verified_run', v_play_token::text, true);
   insert into public.game_scores (
     normalized_name, game_slug, display_name,
     first_score, best_score, play_count,
@@ -197,7 +197,7 @@ begin
 end;
 $$;
 
-create or replace function public.submit_sabaibu_run(
+create or replace function public.submit_sabasaba_run(
   p_play_token uuid,
   p_mode text,
   p_outcome text,
@@ -229,7 +229,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_run private.sabaibu_run_sessions%rowtype;
+  v_run private.sabasaba_run_sessions%rowtype;
   v_expected_slug text;
   v_server_elapsed integer;
   v_kill_points integer;
@@ -245,11 +245,11 @@ declare
   v_is_new_best boolean := false;
 begin
   if p_play_token is null then raise exception 'play token is required'; end if;
-  v_expected_slug := case p_mode when 'normal' then 'sabaibu_normal' when 'endless' then 'sabaibu_endless' else null end;
+  v_expected_slug := case p_mode when 'normal' then 'sabasaba_normal' when 'endless' then 'sabasaba_endless' else null end;
   if v_expected_slug is null then raise exception 'invalid mode'; end if;
 
   select * into v_run
-  from private.sabaibu_run_sessions s
+  from private.sabasaba_run_sessions s
   where s.play_token = p_play_token
   for update;
   if not found then raise exception 'play token not found'; end if;
@@ -319,8 +319,8 @@ begin
     return;
   end if;
 
-  perform set_config('app.sabaibu_verified_run', p_play_token::text, true);
-  update private.sabaibu_run_sessions set
+  perform set_config('app.sabasaba_verified_run', p_play_token::text, true);
+  update private.sabasaba_run_sessions set
     status = 'submitted',
     finished_at = clock_timestamp(),
     outcome = p_outcome,
@@ -342,7 +342,7 @@ begin
     left(coalesce(p_client_version, ''), 120),
     clock_timestamp(),
     jsonb_build_object(
-      'source', 'sabaibu_verified',
+      'source', 'sabasaba_verified',
       'play_token', p_play_token::text,
       'outcome', p_outcome,
       'elapsed_seconds', p_elapsed_seconds,
@@ -394,11 +394,11 @@ $$;
 
 revoke execute on function private.guard_verified_score_write()
   from public, anon, authenticated;
-revoke execute on function public.start_sabaibu_run(text, text, uuid, text)
+revoke execute on function public.start_sabasaba_run(text, text, uuid, text)
   from public, anon, authenticated;
-revoke execute on function public.submit_sabaibu_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text)
+revoke execute on function public.submit_sabasaba_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text)
   from public, anon, authenticated;
-grant execute on function public.start_sabaibu_run(text, text, uuid, text)
+grant execute on function public.start_sabasaba_run(text, text, uuid, text)
   to anon, authenticated;
-grant execute on function public.submit_sabaibu_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text)
+grant execute on function public.submit_sabasaba_run(uuid, text, text, integer, integer, integer, integer, integer, integer, text)
   to anon, authenticated;

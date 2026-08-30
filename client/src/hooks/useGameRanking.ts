@@ -4,19 +4,19 @@ import { isRankableOutcome } from "@/game/rules";
 
 const SUPABASE_URL = "https://mlpnjgezrnhdxsxolyzj.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_drzcy0v97knU6FgjqSgBHw_0A9XPdFM";
-const START_RUN_RPC = "start_sabaibu_run";
-const SUBMIT_RUN_RPC = "submit_sabaibu_run";
+const START_RUN_RPC = "start_sabasaba_run";
+const SUBMIT_RUN_RPC = "submit_sabasaba_run";
 const BEST_RANKING_RPC = "get_best_score_ranking";
 const REQUEST_TIMEOUT_MS = 8_000;
 export const RANKING_LIMIT = 10;
-const CLIENT_VERSION = "sabaibu-web-2.0.0-verified-ranking";
-const PENDING_STORAGE_KEY = "sabaibu-ranking-pending-v2";
+const CLIENT_VERSION = "sabasaba-web-2.0.0-verified-ranking";
+const PENDING_STORAGE_KEY = "sabasaba-ranking-pending-v2";
 
 export const RANKING_ENABLED = false;
 
 const GAME_SLUGS: Record<GameMode, string> = {
-  normal: "sabaibu_normal",
-  endless: "sabaibu_endless",
+  normal: "sabasaba_normal",
+  endless: "sabasaba_endless",
 };
 
 export type RankingRow = {
