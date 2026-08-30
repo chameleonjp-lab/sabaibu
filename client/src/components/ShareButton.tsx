@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+export const buildShareText = (text: string, url: string) => `${text.trim()}\n${url}`;
+
 type ShareButtonProps = {
   title: string;
   text: string;
@@ -38,7 +40,7 @@ export default function ShareButton({ title, text, label, testId, className = ""
 
   const share = async () => {
     const url = getShareUrl();
-    const shareText = `${text.trim()}\n${url}`;
+    const shareText = buildShareText(text, url);
     const shareData = { title, text: shareText };
 
     if (typeof navigator.share === "function") {
