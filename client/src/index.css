@@ -319,6 +319,57 @@ button { font: inherit; }
 .pre-run-panel > h1 { margin: 0; color: #fff5e2; font: 700 clamp(32px, 7vw, 64px) / .86 "Chakra Petch", sans-serif; letter-spacing: .035em; }
 .pre-run-panel > h1 span { color: #ffad26; }
 .pre-run-purpose { max-width: 52ch; margin: 20px 0 24px; color: rgba(246, 238, 222, .78); font-size: 14px; line-height: 1.8; }
+
+.pre-run-rules { margin: 0 0 24px; padding: 15px; border: 1px solid rgba(117, 239, 236, .28); background: linear-gradient(145deg, rgba(8, 26, 28, .68), rgba(5, 12, 13, .78)); }
+.pre-run-rules-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid rgba(117, 239, 236, .18); }
+.pre-run-rules-header span, .pre-run-rules-common > span { color: rgba(169, 243, 240, .72); font: 700 8px / 1 "IBM Plex Mono", monospace; letter-spacing: .14em; }
+.pre-run-rules-header h2 { margin: 5px 0 0; color: #fff5e2; font: 700 24px / .95 "Chakra Petch", sans-serif; letter-spacing: .06em; }
+.pre-run-rules-header > small { color: #ffca6c; font: 700 8px / 1 "IBM Plex Mono", monospace; letter-spacing: .12em; white-space: nowrap; }
+.pre-run-rules-lead { margin: 0 0 12px; color: rgba(246, 238, 222, .76); font-size: 11px; line-height: 1.65; }
+.pre-run-rule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.pre-run-rule-card { padding: 11px 12px; border: 1px solid rgba(216, 231, 218, .22); background: rgba(6, 18, 19, .68); }
+.pre-run-rule-card.selected { border-color: rgba(255, 173, 38, .72); box-shadow: inset 0 0 18px rgba(255, 173, 38, .08); }
+.pre-run-rule-card-heading { display: flex; align-items: baseline; gap: 8px; }
+.pre-run-rule-card-heading > span { color: rgba(169, 255, 241, .55); font: 600 8px / 1 "IBM Plex Mono", monospace; letter-spacing: .1em; }
+.pre-run-rule-card-heading h3 { margin: 0; color: #ffca6c; font: 700 16px / 1 "Chakra Petch", sans-serif; letter-spacing: .08em; }
+.pre-run-rule-card ul { margin: 8px 0 0; padding-left: 17px; color: rgba(243, 255, 251, .72); font-size: 10px; line-height: 1.65; }
+.pre-run-rule-card li + li { margin-top: 4px; }
+.pre-run-rules-common { margin-top: 12px; padding-top: 11px; border-top: 1px solid rgba(117, 239, 236, .16); }
+.pre-run-rules-list { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.pre-run-rules-list li { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; color: rgba(220, 243, 241, .68); font-size: 10px; line-height: 1.55; }
+.pre-run-rules-list b { color: #a9fff1; font: 700 8px / 1.55 "IBM Plex Mono", monospace; letter-spacing: .08em; }
+
+.pre-run-rules-trigger { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; width: 100%; min-height: 52px; margin-top: -9px; padding: 11px 12px; color: #fff4de; text-align: left; cursor: pointer; border: 1px solid rgba(89, 221, 255, .48); background: linear-gradient(105deg, rgba(9, 38, 48, .86), rgba(10, 17, 18, .92)); box-shadow: inset 0 0 18px rgba(89, 221, 255, .08); }
+.pre-run-rules-trigger:hover { border-color: #59ddff; background: rgba(16, 61, 75, .9); }
+.pre-run-rules-trigger:active { transform: scale(.99); }
+.pre-run-rules-trigger:focus-visible { outline: 3px solid rgba(169, 255, 246, .95); outline-offset: 3px; }
+.pre-run-rules-trigger span { font: 700 16px / 1.1 "Chakra Petch", sans-serif; letter-spacing: .08em; }
+.pre-run-rules-trigger small { grid-column: 1; color: rgba(212, 238, 239, .66); font: 500 9px / 1.35 "IBM Plex Mono", monospace; letter-spacing: .06em; }
+.pre-run-rules-trigger b { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #7eeaff; font: 600 9px "IBM Plex Mono", monospace; letter-spacing: .14em; }
+.pre-run-rules-layer { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); background: rgba(2, 5, 7, .86); backdrop-filter: blur(9px); animation: modal-in .2s cubic-bezier(.23, 1, .32, 1); }
+.pre-run-rules-modal { width: min(680px, 100%); max-height: calc(100svh - 32px); margin: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: clamp(20px, 4vw, 38px); }
+.pre-run-rules-modal .pre-run-rules-header > button { flex: 0 0 auto; min-height: 42px; padding: 8px 11px; color: #ffe4b3; cursor: pointer; border: 1px solid rgba(255, 173, 38, .62); background: rgba(68, 35, 7, .56); font: 700 8px / 1 "IBM Plex Mono", monospace; letter-spacing: .1em; }
+.pre-run-rules-modal .pre-run-rules-header > button:hover { border-color: #ffbd4a; background: rgba(122, 62, 6, .72); }
+.pre-run-rules-modal .pre-run-rules-header > button:focus-visible { outline: 3px solid rgba(169, 255, 246, .95); outline-offset: 3px; }
+
+
+@media (max-width: 560px) {
+  .pre-run-rules { margin-bottom: 18px; padding: 12px; }
+  .pre-run-rules-header h2 { font-size: 20px; }
+  .pre-run-rule-grid { grid-template-columns: 1fr; }
+  .pre-run-rule-card { padding: 10px; }
+  .pre-run-rules-list li { grid-template-columns: 38px minmax(0, 1fr); gap: 6px; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .pre-run-rules { margin-bottom: 14px; padding: 11px 13px; }
+  .pre-run-rules-header { margin-bottom: 7px; padding-bottom: 7px; }
+  .pre-run-rules-lead { margin-bottom: 8px; font-size: 10px; }
+  .pre-run-rule-card { padding: 8px 10px; }
+  .pre-run-rule-card ul { margin-top: 5px; line-height: 1.5; }
+  .pre-run-rules-common { margin-top: 8px; padding-top: 8px; }
+}
+
 .pre-run-form { display: grid; gap: 19px; }
 .name-field { display: grid; gap: 7px; }
 .name-field > span, .mode-picker legend { color: rgba(255, 220, 159, .8); font: 700 10px / 1 "IBM Plex Mono", monospace; letter-spacing: .14em; }
@@ -685,4 +736,23 @@ button { font: inherit; }
   .weapon-library-close { width: 38px; height: 38px; font-size: 27px; }
   .weapon-level-section > header { display: grid; gap: 5px; }
   .weapon-level-section > header span { text-align: left; }
+}
+
+/* Keep the rules trigger directly beneath the Endless option on wider screens. */
+.mode-picker-layout { align-items: start; }
+.mode-picker-layout > [role="radiogroup"] { display: contents; }
+.pre-run-rules-trigger { grid-column: 2; margin-top: 0; }
+
+@media (max-width: 560px) {
+  .pre-run-rules-trigger { grid-column: 1; }
+}
+
+.pre-run-device-guide { margin-top: 12px; padding-top: 11px; border-top: 1px solid rgba(117, 239, 236, .16); }
+.pre-run-device-guide > header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.pre-run-device-guide > header span { color: rgba(169, 243, 240, .72); font: 700 8px / 1 "IBM Plex Mono", monospace; letter-spacing: .14em; }
+.pre-run-device-guide > header b { color: #ffca6c; font: 700 11px / 1 "Chakra Petch", sans-serif; letter-spacing: .08em; }
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .pre-run-device-guide { margin-top: 8px; padding-top: 8px; }
+  .pre-run-device-guide > header { margin-bottom: 5px; }
 }
