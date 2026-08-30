@@ -70,6 +70,28 @@ describe("GameWorld runtime smoke", () => {
   });
 });
 
+describe("GameWorld preparation state", () => {
+  it("keeps the run playing but does not advance it while the scene is preparing", () => {
+    stubWindow();
+    let latestSnapshot: GameSnapshot | undefined;
+    const { engine, scene, world } = createNormalWorld((snapshot) => { latestSnapshot = snapshot; });
+
+    world.setPreparing(true);
+    world.update(2);
+
+    expect(latestSnapshot?.phase).toBe("playing");
+    expect(latestSnapshot?.seconds).toBe(0);
+
+    world.setPreparing(false);
+    world.update(1 / 60);
+    expect(latestSnapshot?.seconds).toBeGreaterThan(0);
+
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+});
+
 describe("GameWorld damage ordering", () => {
   it("honors dodge invulnerability even during the shared damage cooldown", () => {
     stubWindow();
