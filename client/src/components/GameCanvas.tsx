@@ -810,7 +810,7 @@ export default function GameCanvas() {
           return;
         }
       }
-      if (event.key.toLowerCase() === "p" && phaseRef.current === "playing" && !settingsOpen && !tutorialOpen) {
+      if (event.key.toLowerCase() === "p" && phaseRef.current === "playing" && !settingsOpen && !tutorialOpen && !countdownActiveRef.current) {
         pauseOpenRef.current = !isPaused;
         lifecyclePauseRequestedRef.current = false;
         setPausedCommand(!isPaused);
