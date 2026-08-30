@@ -65,13 +65,14 @@ jobs:
             exit 1
           fi
           grep -Eq '(src|href)="/sabasaba/assets/' dist/public/index.html
-          grep -Eq 'property="og:image" content="https://chameleonjp.github.io/sabasaba/assets/sabasaba-social-card\\.png"' dist/public/index.html
+          grep -Eq 'property="og:image" content="https://chameleonjp-lab.github.io/sabasaba/assets/sabasaba-social-card\\.png"' dist/public/index.html
           grep -Eq 'name="twitter:card" content="summary_large_image"' dist/public/index.html
           for asset in \
             neon-siege-floor.svg \
             neon-siege-drone-panel.svg \
             neon-siege-sigil.svg \
-            neon-siege-visual-target.svg; do
+            neon-siege-visual-target.svg \
+            sabasaba-social-card.png; do
             test -s "dist/public/assets/$asset"
           done
           for audio in cc0-metal1.wav cc0-switch1.wav; do
