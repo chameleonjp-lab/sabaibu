@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RANKING_ENABLED, RANKING_LIMIT, canSubmitRankingResult, createClientRunId, normalizeRankingName, rankingSlugForMode } from "@/hooks/useGameRanking";
 
 describe("verified ranking contract", () => {
-  it("keeps ranking disabled until server-authoritative validation is ready", () => {
-    expect(RANKING_ENABLED).toBe(false);
+  it("enables ranking after server-authoritative validation is ready", () => {
+    expect(RANKING_ENABLED).toBe(true);
   });
 
   it("requests the top ten records when ranking is enabled", () => {
