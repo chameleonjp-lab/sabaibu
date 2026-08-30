@@ -577,7 +577,7 @@ export default function GameCanvas() {
     setSceneReady(false);
     setRunStarted(false);
     setSnapshot(INITIAL_SNAPSHOT);
-  }, [resetJoystick, resetRankingState, setPausedCommand]);
+  }, [cancelRunCountdown, resetJoystick, resetRankingState, setPausedCommand]);
 
   const retryRun = useCallback(() => {
     resetRankingState();
