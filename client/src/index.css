@@ -737,3 +737,12 @@ button { font: inherit; }
   .weapon-level-section > header { display: grid; gap: 5px; }
   .weapon-level-section > header span { text-align: left; }
 }
+
+/* Keep the rules trigger directly beneath the Endless option on wider screens. */
+.mode-picker-layout { align-items: start; }
+.mode-picker-layout > [role="radiogroup"] { display: contents; }
+.pre-run-rules-trigger { grid-column: 2; margin-top: 0; }
+
+@media (max-width: 560px) {
+  .pre-run-rules-trigger { grid-column: 1; }
+}
