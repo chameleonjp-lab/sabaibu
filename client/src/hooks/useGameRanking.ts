@@ -12,7 +12,7 @@ export const RANKING_LIMIT = 10;
 const CLIENT_VERSION = "sabasaba-web-2.0.0-verified-ranking";
 const PENDING_STORAGE_KEY = "sabasaba-ranking-pending-v2";
 
-export const RANKING_ENABLED = false;
+export const RANKING_ENABLED = true;
 
 const GAME_SLUGS: Record<GameMode, string> = {
   normal: "sabasaba_normal",
