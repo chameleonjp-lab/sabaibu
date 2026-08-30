@@ -1025,6 +1025,15 @@ export default function GameCanvas() {
           <p className="modal-eyebrow">封鎖区域 // セクター07</p>
           <h1 id="pre-run-title">サバサバ</h1>
           <p className="pre-run-purpose">自動射撃で敵の波を切り抜け、経験値を集め、装備を進化させる見下ろし型サバイバル。</p>
+           <section className="pre-run-rules" data-testid="home-rules" aria-labelledby="home-rules-title">
+             <header className="pre-run-rules-header"><div><span>MISSION BRIEF // 出撃前確認</span><h2 id="home-rules-title">ルール説明</h2></div><small>先に確認</small></header>
+             <p className="pre-run-rules-lead">移動しながら自動射撃。敵を倒して経験値を集め、レベルアップで戦い方を組み立てます。</p>
+             <div className="pre-run-rule-grid">
+               <article className={`pre-run-rule-card ${selectedMode === "normal" ? "selected" : ""}`} data-mode-rule="normal"><div className="pre-run-rule-card-heading"><span>01</span><h3>通常</h3></div><ul><li>10分の任務。3:00・6:00・9:15にボスが出現します。</li><li>最終ボスを倒せばクリア。時間内に倒せなければ失敗です。</li></ul></article>
+               <article className={`pre-run-rule-card ${selectedMode === "endless" ? "selected" : ""}`} data-mode-rule="endless"><div className="pre-run-rule-card-heading"><span>02</span><h3>無限</h3></div><ul><li>ゲームオーバーまで生存し、撃破数と生存時間で得点を伸ばします。</li><li>Lv.5から5レベルごとにボス。撃破後は攻撃力+4%か、最大HP+5（HPも5回復）を選びます。</li></ul></article>
+             </div>
+             <div className="pre-run-rules-common"><span>共通ルール</span><ul className="pre-run-rules-list"><li><b>移動</b><span>画面の任意位置をタップしてドラッグ。PCはW・A・S・Dまたは矢印キー。</span></li><li><b>回避</b><span>DODGEボタン（PCはSpace）で回避。クールダウンは120秒です。</span></li><li><b>強化</b><span>レベルアップ時に戦闘が止まり、3つの候補から1つを選びます。</span></li><li><b>装備</b><span>攻撃6枠（初期レール含む）・補助4枠。特定の攻撃をTier 3まで揃えると自動進化します。</span></li></ul></div>
+           </section>
           <form className="pre-run-form" noValidate onSubmit={startRun}>
             <label className="name-field"><span>プレイヤー名</span><input ref={nameInputRef} data-testid="player-name" autoComplete="nickname" maxLength={18} value={playerName} onChange={(event) => { setPlayerName(event.target.value); if (nameError) setNameError(""); }} placeholder="プレイヤー01" aria-invalid={Boolean(nameError)} aria-describedby={nameError ? "name-help name-error" : "name-help"} /><small id="name-help">次回の出撃にも保存されます。</small></label>
             {nameError && <div id="name-error" className="name-entry-alert" role="alert" aria-live="assertive"><span aria-hidden="true">!</span><strong>{nameError}</strong></div>}
