@@ -203,7 +203,7 @@ export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement,
     warningBand.material = containmentCapMaterial;
   });
 
-  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview, options.levelPreview, options.balancePreviewLevel, options.variantPreviewLevel, options.milestoneBossPreviewLevel, options.milestoneRewardPreviewLevel, options.obstaclePreview, options.resultPreview, options.mode);
+  const world = new GameWorld(scene, options.onSnapshot, options.demoMode, options.forceUpgrade, options.forceModulePreview, options.bossPreview, options.strikerPreview, options.idlePreview, options.explosionPreview, options.bossExplosionPreview, options.bossExplosionFarPreview, options.auditModule, options.debugMode, options.rerollPreview, options.levelPreview, options.balancePreviewLevel, options.variantPreviewLevel, options.milestoneBossPreviewLevel, options.milestoneRewardPreviewLevel, options.obstaclePreview, options.resultPreview, options.mode, true);
   let simulationDebt = 0;
   let discardNextFrameDelta = false;
   const clearSimulationDebt = () => {

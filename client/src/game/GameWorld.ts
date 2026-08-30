@@ -349,7 +349,9 @@ export class GameWorld {
     private readonly obstaclePreview: boolean,
     private readonly resultPreview: boolean,
     private readonly mode: GameMode,
+    private readonly initiallyPreparing = false,
   ) {
+    this.preparing = initiallyPreparing;
     this.enemyMaterial = this.makeMaterial("drone-shell", new Color3(0.025, 0.15, 0.17), new Color3(0.02, 0.85, 0.95));
     this.enemyMaterial.diffuseTexture = new Texture(GAME_ASSETS.dronePanel, scene, true, false);
     this.enemyMaterial.emissiveTexture = new Texture(GAME_ASSETS.dronePanel, scene, true, false);
@@ -389,8 +391,12 @@ export class GameWorld {
 
     this.keyDown = (event) => {
       const target = event.target as HTMLElement | null;
-      if (target?.matches("input, button, select, textarea, [contenteditable='true']")) return;
+      if (typeof target?.matches === "function" && target.matches("input, button, select, textarea, [contenteditable='true']")) return;
       const key = event.key.toLowerCase();
+      if (this.preparing) {
+        event.preventDefault();
+        return;
+      }
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
         this.keys.add(key);
         event.preventDefault();
@@ -563,6 +569,10 @@ export class GameWorld {
   }
 
   setTouchDirection(x: number, z: number) {
+    if (this.preparing) {
+      this.touchDirection.setAll(0);
+      return;
+    }
     this.touchDirection.set(x, 0, z);
     if (this.touchDirection.lengthSquared() > 1) this.touchDirection.normalize();
   }
@@ -580,6 +590,7 @@ export class GameWorld {
   }
 
   setPaused(paused: boolean) {
+    if (this.preparing) return;
     if (paused && this.phase === "playing") {
       this.phase = "paused";
       this.touchDirection.setAll(0);
@@ -599,7 +610,7 @@ export class GameWorld {
   }
 
   requestDodge() {
-    if (this.phase !== "playing" || this.dodgeCooldown > 0) return;
+    if (this.preparing || this.phase !== "playing" || this.dodgeCooldown > 0) return;
     const dodgeOrigin = this.player.position.clone();
     const hadImminentThreat = this.hasImminentDodgeThreat(dodgeOrigin);
     const threatenedBoss = this.getImminentDodgeBoss(dodgeOrigin);

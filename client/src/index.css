@@ -507,7 +507,7 @@ button { font: inherit; }
 .experiment-lab-link small { grid-column: 1; color: rgba(255, 226, 174, .66); font: 500 9px/1.35 "IBM Plex Mono", monospace; letter-spacing: .06em; }
 .experiment-lab-link b { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #ffbd4a; font: 600 9px "IBM Plex Mono", monospace; letter-spacing: .14em; }
 .result-actions .experiment-lab-link { margin-top: 0; }
-.kill-milestone-rain { position: absolute; z-index: 35; inset: 0; overflow: hidden; pointer-events: none; contain: layout paint; }
+.kill-milestone-rain { position: absolute; z-index: 1; inset: 0; overflow: hidden; pointer-events: none; contain: layout paint; }
 .kill-milestone-particle { position: absolute; top: -16vh; left: var(--rain-x); display: block; opacity: 0; color: #fff1a8; font: 900 clamp(18px, 4.4vw, 36px)/1 "Chakra Petch", sans-serif; letter-spacing: .025em; text-shadow: 0 0 5px #ffad26, 0 0 14px rgba(255, 173, 38, .82), 0 2px 2px rgba(0, 0, 0, .8); animation: kill-milestone-number-fall var(--rain-duration) linear var(--rain-delay) both; will-change: transform, opacity; }
 .kill-milestone-particle:nth-child(3n) { color: #9efff5; text-shadow: 0 0 5px #49e8e2, 0 0 14px rgba(73, 232, 226, .8), 0 2px 2px rgba(0, 0, 0, .8); }
 .kill-milestone-particle:nth-child(4n) { color: #ffb8ec; text-shadow: 0 0 5px #ff65cf, 0 0 14px rgba(255, 101, 207, .76), 0 2px 2px rgba(0, 0, 0, .8); }
@@ -1154,5 +1154,33 @@ button { font: inherit; }
   }
   .pause-synergy-progress {
     font-size: 7px;
+  }
+}
+
+
+/* PC-only hardening. Touch/coarse smartphone layout rules stay unchanged. */
+@media (hover: hover) and (pointer: fine) and (min-width: 721px) {
+  .mission-bar {
+    grid-template-columns: minmax(190px, 1fr) auto minmax(94px, auto) auto;
+    gap: clamp(10px, 1.5vw, 22px);
+  }
+  .run-controls {
+    position: static;
+    top: auto;
+    right: auto;
+    grid-column: 4;
+    grid-row: 1;
+    justify-self: end;
+    align-self: start;
+  }
+  .game-shell .loadout-rail {
+    left: max(18px, env(safe-area-inset-left));
+    right: max(18px, env(safe-area-inset-right));
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+  .game-shell .loadout-rail > .weapon-card {
+    flex: 0 0 auto;
   }
 }

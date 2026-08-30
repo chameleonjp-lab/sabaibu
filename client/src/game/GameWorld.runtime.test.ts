@@ -28,7 +28,13 @@ type RuntimeWorld = {
 };
 
 const stubWindow = () => {
-  vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+  const target = new EventTarget();
+  vi.stubGlobal("window", {
+    addEventListener: target.addEventListener.bind(target),
+    removeEventListener: target.removeEventListener.bind(target),
+    dispatchEvent: target.dispatchEvent.bind(target),
+  });
+  return target;
 };
 
 const createNormalWorld = (onSnapshot: (snapshot: GameSnapshot) => void) => {
@@ -85,6 +91,40 @@ describe("GameWorld preparation state", () => {
     world.update(1 / 60);
     expect(runtime.elapsed).toBeGreaterThan(0);
 
+    world.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("ignores movement, dodge, and pause keys during initial scene preparation", () => {
+    const windowTarget = stubWindow();
+    const engine = new NullEngine({ renderWidth: 390, renderHeight: 844, textureSize: 256 });
+    const scene = new Scene(engine);
+    const world = new GameWorld(scene, () => undefined, false, false, false, false, false, false, false, false, false, undefined, false, 0, 0, 0, 0, 0, 0, false, false, "normal", true);
+    const runtime = world as unknown as {
+      phase: GameSnapshot["phase"];
+      preparing: boolean;
+      dodgeCooldown: number;
+      player: { position: { x: number; z: number } };
+    };
+    const initialPosition = { x: runtime.player.position.x, z: runtime.player.position.z };
+    const dispatchKey = (key: string) => {
+      const event = new Event("keydown");
+      Object.defineProperty(event, "key", { configurable: true, value: key });
+      windowTarget.dispatchEvent(event);
+    };
+
+    expect(runtime.preparing).toBe(true);
+    dispatchKey("ArrowRight");
+    dispatchKey(" ");
+    dispatchKey("Escape");
+
+    expect(runtime.phase).toBe("playing");
+    expect(runtime.dodgeCooldown).toBe(0);
+    expect(runtime.player.position.x).toBe(initialPosition.x);
+    expect(runtime.player.position.z).toBe(initialPosition.z);
+
+    world.setPreparing(false);
     world.dispose();
     scene.dispose();
     engine.dispose();
