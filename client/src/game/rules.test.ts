@@ -113,9 +113,10 @@ describe("normal-mode rules", () => {
     });
   });
 
-  it("calculates Endless survival scoring and never returns a negative total", () => {
+  it("allows negative totals when deductions exceed additions in both modes", () => {
     expect(calculateScoreBreakdown({ mode: "endless", outcome: "failed", kills: 50, seconds: 600, level: 12, damageHits: 2, damageTaken: 15 }).total).toBe(13_050);
-    expect(calculateScoreBreakdown({ mode: "endless", outcome: "failed", kills: 0, seconds: 1, level: 1, damageHits: 20, damageTaken: 2_000 }).total).toBe(0);
+    expect(calculateScoreBreakdown({ mode: "endless", outcome: "failed", kills: 0, seconds: 1, level: 1, damageHits: 20, damageTaken: 2_000 }).total).toBe(-27_740);
+    expect(calculateScoreBreakdown({ mode: "normal", outcome: "clear", kills: 0, seconds: 600, level: 1, damageHits: 1, damageTaken: 100 }).total).toBe(-1_150);
     expect(SCORE_RULES.damageHitPenalty).toBe(400);
   });
 
