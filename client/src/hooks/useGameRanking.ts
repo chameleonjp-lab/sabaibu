@@ -156,8 +156,8 @@ const parseSubmission = (data: unknown): RankingSubmission => {
   return {
     isNewBest: result.is_new_best === true,
     alreadySubmitted: result.already_submitted === true,
-    score: Math.max(0, Math.trunc(asFiniteNumber(result.result_score))),
-    bestScore: Math.max(0, Math.trunc(asFiniteNumber(result.result_best_score))),
+    score: Math.trunc(asFiniteNumber(result.result_score)),
+    bestScore: Math.trunc(asFiniteNumber(result.result_best_score)),
     playCount: Math.max(0, Math.trunc(asFiniteNumber(result.result_play_count))),
     scoreBreakdown: {
       killPoints: Math.max(0, Math.trunc(asFiniteNumber(result.kill_points))),
@@ -167,7 +167,7 @@ const parseSubmission = (data: unknown): RankingSubmission => {
       damagePenalty: Math.max(0, Math.trunc(asFiniteNumber(result.damage_penalty))),
       positiveTotal: Math.max(0, Math.trunc(asFiniteNumber(result.positive_total))),
       penaltyTotal: Math.max(0, Math.trunc(asFiniteNumber(result.penalty_total))),
-      total: Math.max(0, Math.trunc(asFiniteNumber(result.result_score))),
+      total: Math.trunc(asFiniteNumber(result.result_score)),
     },
   };
 };
@@ -212,7 +212,7 @@ export function useGameRanking() {
       playToken: session.playToken,
       mode: session.mode,
       outcome: snapshot.outcome,
-      score: Math.max(0, Math.trunc(asFiniteNumber(snapshot.score))),
+      score: Math.trunc(asFiniteNumber(snapshot.score)),
       elapsedSeconds: Math.max(0, Math.trunc(asFiniteNumber(snapshot.seconds))),
       kills: Math.max(0, Math.trunc(asFiniteNumber(snapshot.kills))),
       level: Math.max(1, Math.trunc(asFiniteNumber(snapshot.level, 1))),
@@ -256,7 +256,7 @@ export function useGameRanking() {
       return [{
         rank: Math.max(1, Math.trunc(asFiniteNumber(row.rank_no, index + 1))),
         displayName,
-        bestScore: Math.max(0, Math.trunc(asFiniteNumber(row.best_score))),
+        bestScore: Math.trunc(asFiniteNumber(row.best_score)),
         playCount: Math.max(0, Math.trunc(asFiniteNumber(row.play_count))),
       }];
     });

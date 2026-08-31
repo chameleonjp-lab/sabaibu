@@ -193,7 +193,7 @@ export function selectSoundEventsForPlayback(
   return { events: selected, nextEventId };
 }
 
-/** Calculate all positive and negative score components without hidden bonuses. */
+/** Calculate all positive and negative score components; totals may be negative. */
 export function calculateScoreBreakdown(input: ScoreInput): ScoreBreakdown {
   const kills = safeInteger(input.kills, MAX_TRACKED_KILLS);
   const seconds = safeInteger(input.seconds, MAX_TRACKED_SECONDS);
@@ -219,7 +219,7 @@ export function calculateScoreBreakdown(input: ScoreInput): ScoreBreakdown {
     damagePenalty,
     positiveTotal,
     penaltyTotal,
-    total: Math.max(0, positiveTotal - penaltyTotal),
+    total: positiveTotal - penaltyTotal,
   };
 }
 
